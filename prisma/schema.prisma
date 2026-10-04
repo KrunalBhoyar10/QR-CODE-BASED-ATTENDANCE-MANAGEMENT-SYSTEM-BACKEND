@@ -1,0 +1,423 @@
+// Prisma Schema for QR Code Based Attendance Management System
+// Database: PostgreSQL (Permanent Source of Truth)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  PRINCIPAL
+  HOD
+  TEACHER
+  STUDENT
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  DROPPED
+}
+
+enum SessionStatus {
+  SCHEDULED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum SessionType {
+  REGULAR
+  LAB
+  EXTRA
+  TUTORIAL
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum AttendanceVerificationMethod {
+  QR_SCAN
+  MANUAL_TEACHER
+  ADMIN_OVERRIDE
+}
+
+// ==========================================
+// AUTHENTICATION & USERS
+// ==========================================
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         Role      @default(STUDENT)
+  phoneNumber  String?
+  avatarUrl    String?
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Profiles
+  teacher      Teacher?
+  student      Student?
+
+  // Auth tokens & audit
+  refreshTokens      RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  auditLogs          AuditLog[]
+
+  // Managed Department if HOD
+  headedDepartment   Department? @relation("DepartmentHod")
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model RefreshToken {
+  id              String    @id @default(uuid())
+  tokenHash       String    @unique
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt       DateTime
+  isRevoked       Boolean   @default(false)
+  replacedByToken String?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("password_reset_tokens")
+}
+
+// ==========================================
+// ACADEMIC HIERARCHY
+// ==========================================
+
+model Department {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  code        String    @unique
+  description String?
+  hodId       String?   @unique
+  hod         User?     @relation("DepartmentHod", fields: [hodId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Hierarchy relations
+  programs            Program[]
+  teachers            Teacher[]
+  students            Student[]
+  subjects            Subject[]
+  teachingAssignments TeachingAssignment[]
+
+  @@map("departments")
+}
+
+model Program {
+  id            String     @id @default(uuid())
+  name          String     // e.g. "Bachelor of Computer Applications"
+  code          String     // e.g. "BCA"
+  durationYears Int        @default(3)
+  departmentId  String
+  department    Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  // Hierarchy relations
+  academicYears       AcademicYear[]
+  students            Student[]
+  subjects            Subject[]
+  teachingAssignments TeachingAssignment[]
+
+  @@unique([departmentId, code])
+  @@index([departmentId])
+  @@map("programs")
+}
+
+model AcademicYear {
+  id         String   @id @default(uuid())
+  yearNumber Int      // e.g. 1, 2, 3, 4
+  label      String   // e.g. "1st Year", "2nd Year"
+  programId  String
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Hierarchy relations
+  sections            Section[]
+  students            Student[]
+  teachingAssignments TeachingAssignment[]
+  enrollments         StudentEnrollment[]
+
+  @@unique([programId, yearNumber])
+  @@index([programId])
+  @@map("academic_years")
+}
+
+model Section {
+  id             String       @id @default(uuid())
+  name           String       // e.g. "A", "B"
+  capacity       Int?
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // Hierarchy relations
+  students            Student[]
+  teachingAssignments TeachingAssignment[]
+  attendanceSessions  AttendanceSession[]
+  enrollments         StudentEnrollment[]
+
+  @@unique([academicYearId, name])
+  @@index([academicYearId])
+  @@map("sections")
+}
+
+// ==========================================
+// PROFILES (TEACHERS & STUDENTS)
+// ==========================================
+
+model Teacher {
+  id           String     @id @default(uuid())
+  employeeId   String     @unique
+  designation  String?    // e.g. "Assistant Professor", "Associate Professor"
+  userId       String     @unique
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  teachingAssignments TeachingAssignment[]
+  attendanceSessions  AttendanceSession[]
+
+  @@index([departmentId])
+  @@map("teachers")
+}
+
+model Student {
+  id               String       @id @default(uuid())
+  rollNumber       String       @unique
+  enrollmentNumber String       @unique
+  userId           String       @unique
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  departmentId     String
+  department       Department   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  programId        String
+  program          Program      @relation(fields: [programId], references: [id], onDelete: Restrict)
+  academicYearId   String
+  academicYear     AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  sectionId        String
+  section          Section      @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  // Relations
+  enrollments       StudentEnrollment[]
+  attendanceRecords AttendanceRecord[]
+
+  @@index([departmentId])
+  @@index([programId])
+  @@index([academicYearId])
+  @@index([sectionId])
+  @@map("students")
+}
+
+model Subject {
+  id           String     @id @default(uuid())
+  name         String     // e.g. "Core Java", "Data Communication & Networking"
+  code         String     @unique // e.g. "CS-301"
+  credits      Int?
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  programId    String
+  program      Program    @relation(fields: [programId], references: [id], onDelete: Restrict)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  teachingAssignments TeachingAssignment[]
+  attendanceSessions  AttendanceSession[]
+
+  @@index([departmentId])
+  @@index([programId])
+  @@map("subjects")
+}
+
+// ==========================================
+// TEACHING ASSIGNMENT MODEL
+// ==========================================
+// Authorization boundary for teacher attendance sessions
+model TeachingAssignment {
+  id             String           @id @default(uuid())
+  teacherId      String
+  teacher        Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject          @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  departmentId   String
+  department     Department       @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  programId      String
+  program        Program          @relation(fields: [programId], references: [id], onDelete: Cascade)
+  academicYearId String
+  academicYear   AcademicYear     @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  sectionId      String
+  section        Section          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  status         AssignmentStatus @default(ACTIVE)
+  startDate      DateTime?
+  endDate        DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  attendanceSessions AttendanceSession[]
+
+  @@unique([teacherId, subjectId, sectionId, academicYearId])
+  @@index([teacherId])
+  @@index([subjectId])
+  @@index([sectionId])
+  @@index([departmentId])
+  @@map("teaching_assignments")
+}
+
+// ==========================================
+// ENROLLMENT MODEL
+// ==========================================
+
+model StudentEnrollment {
+  id              String           @id @default(uuid())
+  studentId       String
+  student         Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  academicYearId  String
+  academicYear    AcademicYear     @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  sectionId       String
+  section         Section          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  academicSession String           // e.g. "2026-2027"
+  status          EnrollmentStatus @default(ACTIVE)
+  enrolledAt      DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([studentId, academicYearId, sectionId, academicSession])
+  @@index([studentId])
+  @@index([sectionId])
+  @@map("student_enrollments")
+}
+
+// ==========================================
+// ATTENDANCE SESSIONS & RECORDS
+// ==========================================
+
+model AttendanceSession {
+  id                   String           @id @default(uuid())
+  teachingAssignmentId String
+  teachingAssignment   TeachingAssignment @relation(fields: [teachingAssignmentId], references: [id], onDelete: Cascade)
+  teacherId            String
+  teacher              Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subjectId            String
+  subject              Subject          @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  sectionId            String
+  section              Section          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  sessionDate          DateTime         @default(now())
+  startTime            DateTime
+  endTime              DateTime
+  status               SessionStatus    @default(SCHEDULED)
+  sessionType          SessionType      @default(REGULAR)
+  qrCodeSecretHash     String?          // Dynamic salt / secret stored in DB for verification
+  qrCodeTtlSeconds     Int              @default(30)
+  allowLateScan        Boolean          @default(false)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  attendanceRecords    AttendanceRecord[]
+
+  @@index([teachingAssignmentId])
+  @@index([teacherId])
+  @@index([sectionId])
+  @@index([sessionDate])
+  @@map("attendance_sessions")
+}
+
+model AttendanceRecord {
+  id                 String                       @id @default(uuid())
+  sessionId          String
+  session            AttendanceSession            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentId          String
+  student            Student                      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status             AttendanceStatus             @default(PRESENT)
+  markedAt           DateTime                     @default(now())
+  markedVia          AttendanceVerificationMethod @default(QR_SCAN)
+  ipAddress          String?
+  userAgent          String?
+  locationLatitude   Float?
+  locationLongitude  Float?
+  remarks            String?
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+
+  // Strict constraint: UNIQUE(studentId, sessionId)
+  @@unique([studentId, sessionId])
+  @@index([sessionId])
+  @@index([studentId])
+  @@map("attendance_records")
+}
+
+// ==========================================
+// AUDIT LOGS
+// ==========================================
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String   // e.g. "AUTH_LOGIN", "SESSION_STARTED", "PASSWORD_CHANGED"
+  entity    String   // e.g. "User", "AttendanceSession"
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
