@@ -1,4 +1,4 @@
-# QR Code Based Attendance Management System - Backend Foundation
+# QR Code Based Attendance Management System - Backend
 
 A production-oriented college QR Code Based Attendance Management System backend built with **Node.js**, **Express.js**, **PostgreSQL**, **Prisma ORM**, and **Redis**.
 
@@ -21,7 +21,9 @@ Attendance sessions leverage time-limited dynamic QR verification with temporary
 
 ## 2. Current Implementation
 
-This phase delivers the **production backend foundation**:
+This project delivers a **full production backend** with two completed vertical modules:
+
+### Foundation Layer
 - **Layered Architecture**: Strict separation of concerns across controllers, services, repositories, middleware, validators, and infrastructure clients.
 - **Relational Data Model (Prisma)**: Complete PostgreSQL schema covering users, refresh tokens, password reset tokens, academic hierarchy, teacher/student profiles, multi-dimensional teaching assignments, student enrollments, attendance sessions, attendance records with strict unique constraints (`UNIQUE(studentId, sessionId)`), and audit logs.
 - **Authentication & Token System**:
@@ -30,19 +32,21 @@ This phase delivers the **production backend foundation**:
   - Long-lived Rotated Refresh Tokens (7 days) with SHA-256 database hashing
   - Refresh token reuse detection & revocation
   - Password change endpoint with automatic session invalidation
+  - `mustChangePassword` flag for enforced first-login password resets
 - **Authorization & Security Guardrails**:
   - Role-based authorization (`SUPER_ADMIN`, `ADMIN`, `PRINCIPAL`, `HOD`, `TEACHER`, `STUDENT`)
   - Department and resource scope verification middleware
-  - Helmet HTTP security headers
-  - Strict CORS configuration
-  - Input validation via Zod schemas
-  - Centralized operational error handling with sanitized responses (no leaked stack traces or DB internals)
-  - Dual-tier rate limiting (general API rate limiting and strict auth protection against brute-force attacks)
-- **Infrastructure Integrations**:
-  - Resilient Prisma client singleton with connection health checks
-  - Resilient Redis client (`ioredis`) with reconnection backoff and caching/TTL helpers
-  - Live `/health` check reporting database and Redis operational status
-- **Automated Testing Suite**: Jest and Supertest test suites covering unit logic and integration endpoints.
+  - Helmet HTTP security headers, Strict CORS, Zod input validation
+  - Centralized safe error handling (no stack traces or DB internals leaked)
+  - Dual-tier rate limiting (API-level & strict auth brute-force protection)
+- **Infrastructure**: Resilient Prisma + Redis (`ioredis`) singletons, live `/health` check.
+
+### Principal Module
+- **Profile Management**: View and update own profile; secure password change.
+- **HOD Management**: Create HOD accounts with temporary password and `mustChangePassword` enforcement; list, view, activate/deactivate HODs; re-assign HODs to different departments.
+- **Academic Hierarchy Navigation**: Browse the full Department → Program → Academic Year → Section → Subject tree within the principal's scope.
+- **Attendance Analytics**: Institution-wide aggregated reports — overall summary, department-wise, program-wise, academic-year-wise, section-wise, subject-wise breakdowns, plus low-attendance student and subject alerts.
+- **Automated Testing Suite**: Jest/Supertest suites covering 38 tests across 6 test files (unit + integration).
 
 ---
 
@@ -127,55 +131,73 @@ A teacher is **not** naively tied to a single subject. Instead, a teacher's auth
 backend/
 ├── src/
 │   ├── controllers/
-│   │   ├── auth.controller.js          # Thin controller for authentication endpoints
-│   │   └── health.controller.js        # System health and connectivity controller
+│   │   ├── auth.controller.js           # Authentication endpoints
+│   │   ├── academic.controller.js       # Academic hierarchy CRUD
+│   │   ├── principal.controller.js      # Principal profile, HOD, analytics
+│   │   └── health.controller.js         # System health and connectivity
 │   ├── services/
-│   │   ├── auth.service.js             # Authentication workflows and token lifecycle
-│   │   ├── audit.service.js            # Security audit trail logging
-│   │   └── health.service.js           # Database & Redis status evaluator
+│   │   ├── auth.service.js              # Authentication workflows & token lifecycle
+│   │   ├── academic.service.js          # Department / Program / Year / Section / Subject logic
+│   │   ├── principal.service.js         # Principal business logic (HOD mgmt, analytics)
+│   │   ├── audit.service.js             # Security audit trail logging
+│   │   └── health.service.js            # Database & Redis status evaluator
 │   ├── routes/
-│   │   ├── auth.routes.js              # /api/v1/auth routes
-│   │   ├── health.routes.js            # /health endpoint route
-│   │   └── index.routes.js             # API v1 router aggregator
+│   │   ├── auth.routes.js               # /api/v1/auth routes
+│   │   ├── academic.routes.js           # /api/v1/academic routes
+│   │   ├── principal.routes.js          # /api/v1/principal routes
+│   │   ├── health.routes.js             # /health endpoint route
+│   │   └── index.routes.js              # API v1 router aggregator
 │   ├── middleware/
-│   │   ├── auth.middleware.js          # Bearer JWT access-token verification
-│   │   ├── role.middleware.js          # Role-based access control (RBAC)
-│   │   ├── scope.middleware.js         # Department boundary & self-ownership verification
-│   │   ├── validate.middleware.js      # Zod request validator middleware
-│   │   ├── errorHandler.js             # Centralized safe error formatting & 404 handler
-│   │   └── rateLimiter.js              # General API & strict auth rate limiters
+│   │   ├── auth.middleware.js           # Bearer JWT access-token verification
+│   │   ├── role.middleware.js           # Role-based access control (RBAC)
+│   │   ├── scope.middleware.js          # Department boundary & self-ownership verification
+│   │   ├── validate.middleware.js       # Zod request validator middleware
+│   │   ├── errorHandler.js              # Centralized safe error formatting & 404 handler
+│   │   └── rateLimiter.js               # General API & strict auth rate limiters
 │   ├── validators/
-│   │   └── auth.validator.js           # Zod validation schemas for auth actions
+│   │   ├── auth.validator.js            # Zod schemas for auth actions
+│   │   ├── academic.validator.js        # Zod schemas for academic hierarchy
+│   │   └── principal.validator.js       # Zod schemas for Principal endpoints
 │   ├── repositories/
-│   │   ├── user.repository.js          # Database queries for users and profiles
-│   │   ├── refreshToken.repository.js  # Database queries for refresh tokens
-│   │   └── auditLog.repository.js      # Database queries for audit logs
+│   │   ├── user.repository.js           # Users, HOD CRUD, profiles
+│   │   ├── department.repository.js     # Department queries
+│   │   ├── program.repository.js        # Program queries
+│   │   ├── academicYear.repository.js   # Academic year queries
+│   │   ├── section.repository.js        # Section queries
+│   │   ├── subject.repository.js        # Subject queries
+│   │   ├── attendance.repository.js     # Complex attendance aggregation queries
+│   │   ├── refreshToken.repository.js   # Refresh token storage & revocation
+│   │   └── auditLog.repository.js       # Audit log writes
+│   ├── constants/
+│   │   └── attendance.constants.js      # Centralized thresholds & pagination constants
 │   ├── lib/
-│   │   ├── prisma.js                   # Prisma Client singleton & connection check
-│   │   ├── redis.js                    # Redis client with retry logic & cache helpers
-│   │   └── logger.js                   # Structured logging utility
+│   │   ├── prisma.js                    # Prisma Client singleton & connection check
+│   │   ├── redis.js                     # Redis client with retry logic & cache helpers
+│   │   └── logger.js                    # Structured logging utility
 │   ├── utils/
-│   │   ├── errors.js                   # Custom application error classes (AppError, 401, 403, etc.)
-│   │   ├── response.js                 # Standardized success/error JSON response wrappers
-│   │   ├── tokens.js                   # JWT generation, verification, and SHA-256 hashing
-│   │   └── passwords.js                # bcrypt password hashing and comparison
-│   ├── app.js                          # Express application configuration and middleware stack
-│   └── server.js                       # Server entry point with connection checks & graceful shutdown
+│   │   ├── errors.js                    # Custom AppError classes (401, 403, 404, 409 …)
+│   │   ├── response.js                  # Standardized success/error JSON wrappers
+│   │   ├── tokens.js                    # JWT generation, verification, SHA-256 hashing
+│   │   └── passwords.js                 # bcrypt hashing & comparison
+│   ├── app.js                           # Express application & middleware stack
+│   └── server.js                        # Entry point: connection checks & graceful shutdown
 ├── prisma/
-│   └── schema.prisma                   # Production relational schema with PostgreSQL
+│   └── schema.prisma                    # Full relational schema with attendance indexes
 ├── tests/
 │   ├── unit/
-│   │   ├── passwords.test.js           # Unit tests for password utilities
-│   │   └── tokens.test.js              # Unit tests for JWT and crypto hashing
+│   │   ├── passwords.test.js            # Password utility unit tests
+│   │   └── tokens.test.js               # JWT & crypto hashing unit tests
 │   └── integration/
-│       ├── auth.test.js                # Integration tests for authentication flows
-│       └── health.test.js              # Integration tests for /health and / routes
-├── docker-compose.yml                  # One-command orchestration for local PostgreSQL & Redis
-├── .env.example                        # Template environment variables
-├── .env                                # Local environment configuration (git-ignored)
-├── .gitignore                          # Security rules ignoring secrets, logs, node_modules
-├── package.json                        # Dependencies, engines, and operational scripts
-└── README.md                           # Comprehensive documentation
+│       ├── auth.test.js                 # Authentication flow integration tests
+│       ├── academic.test.js             # Academic hierarchy integration tests
+│       ├── principal.test.js            # Principal module integration tests
+│       └── health.test.js              # /health and / route integration tests
+├── docker-compose.yml                   # One-command orchestration for PostgreSQL & Redis
+├── .env.example                         # Template environment variables
+├── .env                                 # Local environment configuration (git-ignored)
+├── .gitignore                           # Ignores secrets, logs, node_modules
+├── package.json                         # Dependencies, engines, and npm scripts
+└── README.md                            # This file
 ```
 
 ---
@@ -392,6 +414,108 @@ All standard API endpoints respond using uniform JSON structures:
 | `PUT` | `/api/v1/academic/subjects/:id` | Admin / Principal / HOD | Update subject details |
 | `DELETE`| `/api/v1/academic/subjects/:id` | Admin / Principal / HOD | Delete a subject |
 
+### Principal Endpoints (`/api/v1/principal`)
+
+> All endpoints require `Authorization: Bearer <access_token>` and `role = PRINCIPAL`.
+
+#### Profile
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/principal/profile` | Get own profile (name, email, role, department) |
+| `PUT` | `/api/v1/principal/profile` | Update own profile (name) |
+| `POST` | `/api/v1/principal/change-password` | Change own password; revokes all active sessions |
+
+#### HOD Management
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/principal/hods` | Create a new HOD account with secure temporary password |
+| `GET` | `/api/v1/principal/hods` | List all HODs (pagination: `page`, `limit`; filter: `search`, `departmentId`, `status`) |
+| `GET` | `/api/v1/principal/hods/:hodId` | View full HOD profile including assigned department |
+| `PUT` | `/api/v1/principal/hods/:hodId` | Update HOD details (name, email, departmentId) |
+| `PATCH` | `/api/v1/principal/hods/:hodId/status` | Activate or deactivate an HOD account |
+
+**Create HOD Request Body:**
+```json
+{
+  "name": "Dr. Priya Sharma",
+  "email": "hod.cs@college.edu",
+  "departmentId": "<uuid>",
+  "temporaryPassword": "Temp@1234"
+}
+```
+
+> [!IMPORTANT]
+> The `temporaryPassword` field is stored as a **bcrypt hash** — never plaintext. The `mustChangePassword` flag is set to `true` automatically, forcing the HOD to change their password on first login.
+
+**Create HOD Response (201):**
+```json
+{
+  "success": true,
+  "message": "HOD created successfully",
+  "data": {
+    "id": "<uuid>",
+    "name": "Dr. Priya Sharma",
+    "email": "hod.cs@college.edu",
+    "role": "HOD",
+    "isActive": true,
+    "mustChangePassword": true,
+    "department": { "id": "<uuid>", "name": "Computer Science", "code": "CS" }
+  }
+}
+```
+
+#### Academic Hierarchy Navigation
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/principal/departments` | List all departments with program and faculty counts |
+| `GET` | `/api/v1/principal/departments/:deptId` | Department details with programs, years, sections, subjects |
+| `GET` | `/api/v1/principal/departments/:deptId/programs` | Programs within a department |
+| `GET` | `/api/v1/principal/programs/:programId/academic-years` | Academic years within a program |
+| `GET` | `/api/v1/principal/academic-years/:yearId/sections` | Sections within an academic year |
+
+#### Attendance Analytics
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/principal/analytics/overall` | Institution-wide summary (total students, sessions, avg % attendance) |
+| `GET` | `/api/v1/principal/analytics/departments` | Attendance breakdown per department |
+| `GET` | `/api/v1/principal/analytics/programs` | Attendance breakdown per program |
+| `GET` | `/api/v1/principal/analytics/academic-years` | Attendance breakdown per academic year |
+| `GET` | `/api/v1/principal/analytics/sections` | Attendance breakdown per section |
+| `GET` | `/api/v1/principal/analytics/subjects` | Attendance breakdown per subject |
+| `GET` | `/api/v1/principal/analytics/low-attendance/students` | Students below attendance threshold (default 75%) |
+| `GET` | `/api/v1/principal/analytics/low-attendance/subjects` | Subjects with class average below threshold |
+
+**Analytics Query Parameters (all optional):**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `startDate` | ISO 8601 date | Filter sessions from this date |
+| `endDate` | ISO 8601 date | Filter sessions up to this date |
+| `departmentId` | UUID | Narrow to a specific department |
+| `programId` | UUID | Narrow to a specific program |
+| `threshold` | number (0–100) | Override default low-attendance threshold (default: 75) |
+| `page` | number | Page number for paginated endpoints |
+| `limit` | number | Items per page (default: 20, max: 100) |
+
+**Overall Analytics Response (200):**
+```json
+{
+  "success": true,
+  "message": "Overall attendance summary retrieved",
+  "data": {
+    "totalStudents": 480,
+    "totalSessions": 1240,
+    "totalPresent": 42800,
+    "totalAbsent": 9800,
+    "averageAttendancePercentage": 81.37
+  }
+}
+```
+
 ---
 
 ## 16. Authentication and Authorization
@@ -428,12 +552,13 @@ All standard API endpoints respond using uniform JSON structures:
 - **Security Headers:** `helmet` sets HTTP headers guarding against XSS, clickjacking, and MIME-sniffing.
 - **Strict CORS:** Configurable whitelist via `CORS_ORIGIN`.
 - **Password Protection:** Hashes with `bcryptjs` using 12 salt rounds; plaintext passwords are never logged or stored.
-- **Refresh Token Hashing:** Raw refresh tokens are never persisted in the database; only SHA-256 hashes are stored.
+- **Temporary Password Enforcement:** HOD accounts created by the Principal receive a temporary password stored as a bcrypt hash. The `mustChangePassword` flag is set to `true`; the system rejects all non-password-change API calls until the flag is cleared.
+- **Refresh Token Hashing:** Raw refresh tokens are never persisted; only SHA-256 hashes are stored.
 - **Rate Limiting:**
   - Standard API limiter: 100 requests per 15 minutes.
   - Auth limiter: 15 login attempts per 15 minutes per IP.
 - **Safe Error Responses:** Database error codes (e.g. Prisma `P2002`) are translated to friendly messages. Stack traces are omitted in production.
-- **Audit Trails:** Security actions (`AUTH_LOGIN`, `AUTH_LOGOUT`, `PASSWORD_CHANGED`) are tracked in the `audit_logs` PostgreSQL table.
+- **Audit Trails:** Security actions (`AUTH_LOGIN`, `AUTH_LOGOUT`, `PASSWORD_CHANGED`, `HOD_CREATED`, `HOD_STATUS_CHANGED`) are tracked in the `audit_logs` PostgreSQL table.
 
 ---
 
@@ -445,15 +570,16 @@ Run the automated test suite with Jest:
 npm test
 ```
 
-The test suite tests:
-- Password hashing and verification algorithms
-- JWT access and refresh token generation and verification
-- Token SHA-256 cryptographic hashing
-- `/health` endpoint status reporting
-- Root `/` and `/api/v1` routes
-- Input validation rejection (HTTP 422)
-- Login authentication flows (HTTP 200 and HTTP 401)
-- Protected `/api/v1/auth/me` profile authorization
+The test suite covers **38 tests across 6 test files**:
+
+| File | What it covers |
+|---|---|
+| `unit/passwords.test.js` | bcrypt hashing & comparison |
+| `unit/tokens.test.js` | JWT generation, verification, SHA-256 hashing |
+| `integration/health.test.js` | `/health`, `/`, `/api/v1` routes |
+| `integration/auth.test.js` | Login flows, token refresh, password change, `me` profile |
+| `integration/academic.test.js` | Department CRUD, RBAC enforcement, hierarchy |
+| `integration/principal.test.js` | Principal profile, HOD CRUD, status management, analytics, hierarchy navigation |
 
 ---
 
