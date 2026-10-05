@@ -513,8 +513,230 @@ All standard API endpoints respond using uniform JSON structures:
     "totalAbsent": 9800,
     "averageAttendancePercentage": 81.37
   }
+### Teacher Endpoints (`/api/v1/teacher`)
+
+> All endpoints require `Authorization: Bearer <access_token>` and `role = TEACHER`.
+> Teacher access is strictly bounded by active `TeachingAssignment` records.
+
+#### 1. Teacher Profile & Password
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/teacher/profile` | Get authenticated teacher's profile (name, email, designation, department) |
+| `PATCH` | `/api/v1/teacher/profile` | Update profile details (firstName, lastName, phoneNumber, avatarUrl, designation) |
+| `POST` | `/api/v1/teacher/change-password` | Change password; revokes all active sessions |
+
+#### 2. Teaching Assignments & Assigned Scopes
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/teacher/assignments` | View own teaching assignments (returns both hierarchical grouped tree & flat list) |
+| `GET` | `/api/v1/teacher/assignments/:id` | View specific teaching assignment by ID (verifies ownership) |
+| `GET` | `/api/v1/teacher/programs` | View assigned distinct programs (e.g. BCA, MCA) |
+| `GET` | `/api/v1/teacher/academic-years` | View assigned academic years (optionally query `programId`) |
+| `GET` | `/api/v1/teacher/sections` | View assigned sections (optionally query `academicYearId`) |
+| `GET` | `/api/v1/teacher/subjects` | View assigned subjects (optionally query `programId`, `academicYearId`, `sectionId`) |
+
+**Teaching Assignments Hierarchical Grouped Response (`GET /api/v1/teacher/assignments`):**
+```json
+{
+  "success": true,
+  "message": "Teaching assignments retrieved successfully",
+  "data": {
+    "teacher": {
+      "id": "aaaa1111-1111-4111-8111-111111111111",
+      "employeeId": "EMP-T-001",
+      "name": "Dr. Alan Turing",
+      "department": { "id": "dddd0000-0000-4000-8000-000000000001", "name": "Computer Science & Applications", "code": "CSA" }
+    },
+    "grouped": [
+      {
+        "programId": "bbbb0000-0000-4000-8000-000000000001",
+        "programName": "Bachelor of Computer Applications",
+        "programCode": "BCA",
+        "durationYears": 3,
+        "academicYears": [
+          {
+            "academicYearId": "11110000-0000-4000-8000-000000000001",
+            "yearNumber": 1,
+            "label": "1st Year",
+            "sections": [
+              {
+                "sectionId": "cccc1111-0000-4000-8000-000000000001",
+                "sectionName": "Section A",
+                "capacity": 60,
+                "subjects": [
+                  {
+                    "assignmentId": "aa110000-0000-4000-8000-000000000001",
+                    "subjectId": "faaa1111-0000-4000-8000-000000000001",
+                    "subjectName": "Core Java Programming",
+                    "subjectCode": "BCA-101",
+                    "credits": 4,
+                    "status": "ACTIVE"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "programId": "aaaa0000-0000-4000-8000-000000000002",
+        "programName": "Master of Computer Applications",
+        "programCode": "MCA",
+        "durationYears": 2,
+        "academicYears": [
+          {
+            "academicYearId": "11110000-0000-4000-8000-000000000002",
+            "yearNumber": 1,
+            "label": "1st Year",
+            "sections": [
+              {
+                "sectionId": "cccc2222-0000-4000-8000-000000000002",
+                "sectionName": "Section B",
+                "capacity": 50,
+                "subjects": [
+                  {
+                    "assignmentId": "aa220000-0000-4000-8000-000000000002",
+                    "subjectId": "faaa2222-0000-4000-8000-000000000002",
+                    "subjectName": "Data Communication & Networking",
+                    "subjectCode": "MCA-102",
+                    "credits": 4,
+                    "status": "ACTIVE"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "academicYearId": "22220000-0000-4000-8000-000000000003",
+            "yearNumber": 2,
+            "label": "2nd Year",
+            "sections": [
+              {
+                "sectionId": "cccc1111-0000-4000-8000-000000000001",
+                "sectionName": "Section A",
+                "capacity": 50,
+                "subjects": [
+                  {
+                    "assignmentId": "aa330000-0000-4000-8000-000000000003",
+                    "subjectId": "faaa1111-0000-4000-8000-000000000001",
+                    "subjectName": "Advanced Java",
+                    "subjectCode": "MCA-201",
+                    "credits": 4,
+                    "status": "ACTIVE"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "assignments": [...],
+    "totalCount": 3
+  }
 }
 ```
+
+#### 3. Attendance Session Management & Real-time Verification
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/teacher/sessions` | Create a new dynamic attendance session (stores in PostgreSQL + Redis TTL + QR token) |
+| `GET` | `/api/v1/teacher/sessions/active` | List currently active sessions (auto-completes expired ones) |
+| `GET` | `/api/v1/teacher/sessions` | List past and present sessions with pagination & filters (`status`, `subjectId`, `sectionId`, `startDate`, `endDate`) |
+| `GET` | `/api/v1/teacher/sessions/:id` | Get session details & aggregate stats |
+| `POST` | `/api/v1/teacher/sessions/:id/close` | Manually end/close an active session (deletes active Redis cache) |
+| `GET` | `/api/v1/teacher/sessions/:id/attendance` | View student attendance records & real-time percentage summary for the session |
+
+**Create Session Request Body (`POST /api/v1/teacher/sessions`):**
+```json
+{
+  "teachingAssignmentId": "aa110000-0000-4000-8000-000000000001",
+  "duration": 120,
+  "allowedRadius": 50,
+  "latitude": 21.1458,
+  "longitude": 79.0882,
+  "faceVerificationRequired": false,
+  "sessionType": "REGULAR"
+}
+```
+
+**Create Session Response (201 Created):**
+```json
+{
+  "success": true,
+  "message": "Attendance session created successfully",
+  "data": {
+    "session": {
+      "id": "ee110000-0000-4000-8000-000000000001",
+      "teachingAssignmentId": "aa110000-0000-4000-8000-000000000001",
+      "teacherId": "aaaa1111-1111-4111-8111-111111111111",
+      "subjectId": "faaa1111-0000-4000-8000-000000000001",
+      "departmentId": "dddd0000-0000-4000-8000-000000000001",
+      "programId": "bbbb0000-0000-4000-8000-000000000001",
+      "academicYearId": "11110000-0000-4000-8000-000000000001",
+      "sectionId": "cccc1111-0000-4000-8000-000000000001",
+      "subject": { "id": "...", "name": "Core Java Programming", "code": "BCA-101" },
+      "section": { "id": "...", "name": "Section A" },
+      "program": { "id": "...", "name": "Bachelor of Computer Applications", "code": "BCA" },
+      "academicYear": { "id": "...", "label": "1st Year", "yearNumber": 1 },
+      "startTime": "2026-10-05T09:30:00.000Z",
+      "expiryTime": "2026-10-05T09:32:00.000Z",
+      "durationSeconds": 120,
+      "status": "ACTIVE",
+      "allowedRadius": 50,
+      "latitude": 21.1458,
+      "longitude": 79.0882,
+      "faceVerificationRequired": false
+    },
+    "qr": {
+      "data": "eyJzZXNzaW9uSWQiOiJlZTExMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJ0b2tlbiI6IjQ5OWE2ZjM0OTJkYzM0OTg0OTM4NDkwOCIsImV4cGlyZXNBdCI6IjIwMjYtMTAtMDVUMDk6MzI6MDAuMDAwWiIsInR5cGUiOiJBVFRFTkRBTkNFX1NFU1NJT04ifQ==",
+      "payload": {
+        "sessionId": "ee110000-0000-4000-8000-000000000001",
+        "token": "499a6f3492dc349849384908",
+        "expiresAt": "2026-10-05T09:32:00.000Z",
+        "type": "ATTENDANCE_SESSION"
+      },
+      "ttlSeconds": 120,
+      "expiresAt": "2026-10-05T09:32:00.000Z"
+    }
+  }
+}
+```
+
+---
+
+### TeachingAssignment Model & Authorization Boundary
+
+The **`TeachingAssignment`** model acts as the strict authorization boundary for faculty:
+- Faculty permissions are **never assumed** globally or program-wide.
+- Every session creation request checks:
+  1. Assignment belongs to authenticated teacher (`assignment.teacherId === teacher.id`).
+  2. Assignment is active (`assignment.status === 'ACTIVE'`).
+  3. Teacher account is active (`teacher.user.isActive === true`).
+  4. Subject is active (`subject.isActive === true`).
+  5. Program is active (`program.isActive === true`).
+- The backend **derives all academic context** (`teacherId`, `subjectId`, `departmentId`, `programId`, `academicYearId`, `sectionId`) strictly from the validated assignment in PostgreSQL. Frontend attempts to override these fields are discarded.
+
+---
+
+### Session Lifecycle, Redis State & QR Security
+
+1. **Dual Storage Lifecycle**:
+   - **PostgreSQL**: Permanent audit record (`attendance_sessions`) storing startTime, expiryTime, location coordinates, allowedRadius, faceVerificationRequired, and timestamps.
+   - **Redis**: High-speed active state stored under `attendance:session:{sessionId}` with **TTL equal to session duration (e.g. 120 seconds)**.
+   - **Fail-Closed Policy**: If Redis is unavailable or cache write fails, the active session is cancelled immediately and fails closed rather than accepting unverified attendance.
+2. **Session Expiry & Manual Closing**:
+   - Expired sessions in Redis are automatically purged upon TTL expiration.
+   - Any query to active sessions auto-completes expired sessions in PostgreSQL.
+   - Manual session closure (`POST /api/v1/teacher/sessions/:id/close`) updates PostgreSQL status to `COMPLETED` and purges the active Redis key.
+3. **Secret-Free QR Token Security**:
+   - The QR payload contains only cryptographically random tokens, session ID, and expiration timestamp.
+   - **Zero Secrets in QR**: No passwords, JWT secrets, database credentials, student personal data, or sensitive tokens are ever exposed in the QR representation.
+4. **Attendance Metrics**:
+   - Attendance counts and percentages are aggregated directly from PostgreSQL database records (`attendance_records` and `students`), never trusting client-provided figures.
 
 ---
 
@@ -570,7 +792,7 @@ Run the automated test suite with Jest:
 npm test
 ```
 
-The test suite covers **38 tests across 6 test files**:
+The test suite covers **90 tests across 8 test files**:
 
 | File | What it covers |
 |---|---|
@@ -580,6 +802,8 @@ The test suite covers **38 tests across 6 test files**:
 | `integration/auth.test.js` | Login flows, token refresh, password change, `me` profile |
 | `integration/academic.test.js` | Department CRUD, RBAC enforcement, hierarchy |
 | `integration/principal.test.js` | Principal profile, HOD CRUD, status management, analytics, hierarchy navigation |
+| `integration/hod.test.js` | HOD profile, program/year/section/subject/teacher/assignment CRUD, department attendance analytics |
+| `integration/teacher.test.js` | Teacher profile & password, TeachingAssignment authorization boundaries, session creation with Redis TTL & secret-free QR tokens, session expiry, manual close, and DB attendance reports |
 
 ---
 

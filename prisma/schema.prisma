@@ -150,6 +150,7 @@ model Department {
   students            Student[]
   subjects            Subject[]
   teachingAssignments TeachingAssignment[]
+  attendanceSessions  AttendanceSession[]
 
   @@map("departments")
 }
@@ -170,6 +171,7 @@ model Program {
   students            Student[]
   subjects            Subject[]
   teachingAssignments TeachingAssignment[]
+  attendanceSessions  AttendanceSession[]
 
   @@unique([departmentId, code])
   @@index([departmentId])
@@ -191,6 +193,7 @@ model AcademicYear {
   students            Student[]
   teachingAssignments TeachingAssignment[]
   enrollments         StudentEnrollment[]
+  attendanceSessions  AttendanceSession[]
 
   @@unique([programId, yearNumber])
   @@index([programId])
@@ -352,25 +355,35 @@ model StudentEnrollment {
 // ==========================================
 
 model AttendanceSession {
-  id                   String           @id @default(uuid())
+  id                   String             @id @default(uuid())
   teachingAssignmentId String
   teachingAssignment   TeachingAssignment @relation(fields: [teachingAssignmentId], references: [id], onDelete: Cascade)
   teacherId            String
-  teacher              Teacher          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  teacher              Teacher            @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   subjectId            String
-  subject              Subject          @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  subject              Subject            @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   sectionId            String
-  section              Section          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  sessionDate          DateTime         @default(now())
+  section              Section            @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  departmentId         String?
+  department           Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  programId            String?
+  program              Program?           @relation(fields: [programId], references: [id], onDelete: SetNull)
+  academicYearId       String?
+  academicYear         AcademicYear?      @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  sessionDate          DateTime           @default(now())
   startTime            DateTime
   endTime              DateTime
-  status               SessionStatus    @default(SCHEDULED)
-  sessionType          SessionType      @default(REGULAR)
-  qrCodeSecretHash     String?          // Dynamic salt / secret stored in DB for verification
-  qrCodeTtlSeconds     Int              @default(30)
-  allowLateScan        Boolean          @default(false)
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  status               SessionStatus      @default(SCHEDULED)
+  sessionType          SessionType        @default(REGULAR)
+  allowedRadius        Float?             // Geo-fence radius in meters
+  latitude             Float?             // Geolocation latitude
+  longitude            Float?             // Geolocation longitude
+  faceVerificationRequired Boolean        @default(false)
+  qrCodeSecretHash     String?            // Dynamic salt / secret stored in DB for verification
+  qrCodeTtlSeconds     Int                @default(30)
+  allowLateScan        Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 
   attendanceRecords    AttendanceRecord[]
 
@@ -378,6 +391,9 @@ model AttendanceSession {
   @@index([teacherId])
   @@index([sectionId])
   @@index([subjectId])
+  @@index([departmentId])
+  @@index([programId])
+  @@index([academicYearId])
   @@index([sessionDate])
   @@index([status])
   @@index([sectionId, status])
