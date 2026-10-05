@@ -1,32 +1,132 @@
 import { jest } from '@jest/globals';
 
+const prismaMock = {
+  $queryRaw: jest.fn().mockResolvedValue([{ 1: 1 }]),
+  $disconnect: jest.fn().mockResolvedValue(true),
+  $transaction: jest.fn(async (cb) => cb({
+    user: {
+      create: jest.fn(),
+      update: jest.fn(),
+      findUnique: jest.fn(),
+    },
+    department: {
+      update: jest.fn(),
+      updateMany: jest.fn(),
+    },
+  })),
+};
+
+const redisMock = {
+  ping: jest.fn().mockResolvedValue('PONG'),
+  status: 'ready',
+  on: jest.fn(),
+  quit: jest.fn().mockResolvedValue('OK'),
+};
+
+const userRepoMock = {
+  findById: jest.fn(),
+  findByEmail: jest.fn(),
+  findByIdWithProfiles: jest.fn(),
+  update: jest.fn(),
+  updatePasswordWithFlag: jest.fn(),
+  findHods: jest.fn(),
+  countHods: jest.fn(),
+  findHodById: jest.fn(),
+  createHodWithDepartment: jest.fn(),
+  updateHod: jest.fn(),
+  updateHodStatus: jest.fn(),
+};
+
+const deptRepoMock = {
+  findAll: jest.fn(),
+  findById: jest.fn(),
+  findByCode: jest.fn(),
+  create: jest.fn(),
+  update: jest.fn(),
+  delete: jest.fn(),
+};
+
+const programRepoMock = {
+  findAllByDepartment: jest.fn(),
+  findById: jest.fn(),
+};
+
+const academicYearRepoMock = {
+  findAllByProgram: jest.fn(),
+  findById: jest.fn(),
+};
+
+const sectionRepoMock = {
+  findAllByAcademicYear: jest.fn(),
+  findById: jest.fn(),
+};
+
+const attendanceRepoMock = {
+  getOverallSummary: jest.fn(),
+  getDepartmentWiseAttendance: jest.fn(),
+  getProgramWiseAttendance: jest.fn(),
+  getAcademicYearWiseAttendance: jest.fn(),
+  getSectionWiseAttendance: jest.fn(),
+  getSubjectWiseAttendance: jest.fn(),
+  getLowAttendanceStudents: jest.fn(),
+  getLowAttendanceSubjects: jest.fn(),
+};
+
+const refreshTokenRepoMock = {
+  create: jest.fn(),
+  revokeToken: jest.fn(),
+  revokeAllUserTokens: jest.fn().mockResolvedValue(true),
+};
+
+const auditLogRepoMock = {
+  createLog: jest.fn().mockResolvedValue(null),
+};
+
+const hodRepoMock = {
+  findDepartmentById: jest.fn(),
+  findProgramsByDepartment: jest.fn(),
+  findProgramById: jest.fn(),
+  findProgramByCode: jest.fn(),
+  createProgram: jest.fn(),
+  updateProgram: jest.fn(),
+  findAcademicYearsByProgram: jest.fn(),
+  findAcademicYearById: jest.fn(),
+  findAcademicYearByProgramAndNumber: jest.fn(),
+  createAcademicYear: jest.fn(),
+  updateAcademicYear: jest.fn(),
+  findSectionsByAcademicYear: jest.fn(),
+  findSectionById: jest.fn(),
+  findSectionByAcademicYearAndName: jest.fn(),
+  createSection: jest.fn(),
+  updateSection: jest.fn(),
+  findSubjectsByDepartment: jest.fn(),
+  findSubjectById: jest.fn(),
+  findSubjectByCode: jest.fn(),
+  createSubject: jest.fn(),
+  updateSubject: jest.fn(),
+  findTeachersByDepartment: jest.fn(),
+  findTeacherById: jest.fn(),
+  findTeacherByEmployeeId: jest.fn(),
+  createTeacherWithUser: jest.fn(),
+  updateTeacherStatus: jest.fn(),
+  findAssignmentsByDepartment: jest.fn(),
+  findAssignmentById: jest.fn(),
+  findDuplicateAssignment: jest.fn(),
+  createTeachingAssignment: jest.fn(),
+  updateAssignmentStatus: jest.fn(),
+  findStudentsByDepartment: jest.fn(),
+  findStudentById: jest.fn(),
+  findStudentAttendance: jest.fn(),
+};
+
 // Unstable mock modules BEFORE dynamic imports
 jest.unstable_mockModule('../../src/lib/prisma.js', () => ({
-  prisma: {
-    $queryRaw: jest.fn().mockResolvedValue([{ 1: 1 }]),
-    $disconnect: jest.fn().mockResolvedValue(true),
-    $transaction: jest.fn(async (cb) => cb({
-      user: {
-        create: jest.fn(),
-        update: jest.fn(),
-        findUnique: jest.fn(),
-      },
-      department: {
-        update: jest.fn(),
-        updateMany: jest.fn(),
-      },
-    })),
-  },
+  prisma: prismaMock,
   checkDatabaseConnection: jest.fn().mockResolvedValue({ isConnected: true }),
 }));
 
 jest.unstable_mockModule('../../src/lib/redis.js', () => ({
-  redis: {
-    ping: jest.fn().mockResolvedValue('PONG'),
-    status: 'ready',
-    on: jest.fn(),
-    quit: jest.fn().mockResolvedValue('OK'),
-  },
+  redis: redisMock,
   checkRedisConnection: jest.fn().mockResolvedValue({ isConnected: true }),
   getCache: jest.fn().mockResolvedValue(null),
   setCache: jest.fn().mockResolvedValue(true),
@@ -34,78 +134,41 @@ jest.unstable_mockModule('../../src/lib/redis.js', () => ({
 }));
 
 jest.unstable_mockModule('../../src/repositories/user.repository.js', () => ({
-  default: {
-    findById: jest.fn(),
-    findByEmail: jest.fn(),
-    findByIdWithProfiles: jest.fn(),
-    update: jest.fn(),
-    updatePasswordWithFlag: jest.fn(),
-    findHods: jest.fn(),
-    countHods: jest.fn(),
-    findHodById: jest.fn(),
-    createHodWithDepartment: jest.fn(),
-    updateHod: jest.fn(),
-    updateHodStatus: jest.fn(),
-  },
+  default: userRepoMock,
 }));
 
 jest.unstable_mockModule('../../src/repositories/department.repository.js', () => ({
-  default: {
-    findAll: jest.fn(),
-    findById: jest.fn(),
-    findByCode: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-  },
+  default: deptRepoMock,
 }));
 
 jest.unstable_mockModule('../../src/repositories/program.repository.js', () => ({
-  default: {
-    findAllByDepartment: jest.fn(),
-    findById: jest.fn(),
-  },
+  default: programRepoMock,
 }));
 
 jest.unstable_mockModule('../../src/repositories/academicYear.repository.js', () => ({
-  default: {
-    findAllByProgram: jest.fn(),
-    findById: jest.fn(),
-  },
+  default: academicYearRepoMock,
 }));
 
 jest.unstable_mockModule('../../src/repositories/section.repository.js', () => ({
-  default: {
-    findAllByAcademicYear: jest.fn(),
-    findById: jest.fn(),
-  },
+  default: sectionRepoMock,
 }));
 
 jest.unstable_mockModule('../../src/repositories/attendance.repository.js', () => ({
-  default: {
-    getOverallSummary: jest.fn(),
-    getDepartmentWiseAttendance: jest.fn(),
-    getProgramWiseAttendance: jest.fn(),
-    getAcademicYearWiseAttendance: jest.fn(),
-    getSectionWiseAttendance: jest.fn(),
-    getSubjectWiseAttendance: jest.fn(),
-    getLowAttendanceStudents: jest.fn(),
-    getLowAttendanceSubjects: jest.fn(),
-  },
+  default: attendanceRepoMock,
 }));
 
 jest.unstable_mockModule('../../src/repositories/refreshToken.repository.js', () => ({
-  default: {
-    create: jest.fn(),
-    revokeToken: jest.fn(),
-    revokeAllUserTokens: jest.fn().mockResolvedValue(true),
-  },
+  default: refreshTokenRepoMock,
 }));
 
 jest.unstable_mockModule('../../src/repositories/auditLog.repository.js', () => ({
-  default: {
-    createLog: jest.fn().mockResolvedValue(null),
-  },
+  default: auditLogRepoMock,
+}));
+
+// Required: hod.service.js is loaded as a side-effect when app registers /hod routes.
+// Mocking hod.repository ensures no real Prisma calls leak during principal tests.
+jest.unstable_mockModule('../../src/repositories/hod.repository.js', () => ({
+  default: hodRepoMock,
 }));
 
 const { default: app } = await import('../../src/app.js');

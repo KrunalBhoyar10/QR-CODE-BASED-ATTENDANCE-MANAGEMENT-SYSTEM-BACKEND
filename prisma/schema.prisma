@@ -159,6 +159,7 @@ model Program {
   name          String     // e.g. "Bachelor of Computer Applications"
   code          String     // e.g. "BCA"
   durationYears Int        @default(3)
+  isActive      Boolean    @default(true)
   departmentId  String
   department    Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   createdAt     DateTime   @default(now())
@@ -172,6 +173,7 @@ model Program {
 
   @@unique([departmentId, code])
   @@index([departmentId])
+  @@index([departmentId, isActive])
   @@map("programs")
 }
 
@@ -271,6 +273,7 @@ model Subject {
   name         String     // e.g. "Core Java", "Data Communication & Networking"
   code         String     @unique // e.g. "CS-301"
   credits      Int?
+  isActive     Boolean    @default(true)
   departmentId String
   department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   programId    String
@@ -283,6 +286,7 @@ model Subject {
 
   @@index([departmentId])
   @@index([programId])
+  @@index([departmentId, isActive])
   @@map("subjects")
 }
 

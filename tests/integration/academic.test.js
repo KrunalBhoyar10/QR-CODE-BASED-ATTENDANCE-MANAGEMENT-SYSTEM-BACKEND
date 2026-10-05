@@ -1,4 +1,4 @@
-﻿import { jest } from '@jest/globals';
+import { jest } from '@jest/globals';
 
 // Shared mock instances defined OUTSIDE factory functions so the same
 // jest.fn() reference is used by both the test and the service layer.
@@ -60,6 +60,28 @@ jest.unstable_mockModule('../../src/repositories/subject.repository.js',      ()
 jest.unstable_mockModule('../../src/repositories/attendance.repository.js',   () => ({ default: attendanceRepoMock }));
 jest.unstable_mockModule('../../src/repositories/refreshToken.repository.js', () => ({ default: refreshTokenRepoMock }));
 jest.unstable_mockModule('../../src/repositories/auditLog.repository.js',     () => ({ default: auditLogRepoMock }));
+// hod.repository is needed because app.js loads hod.routes.js as a side effect
+jest.unstable_mockModule('../../src/repositories/hod.repository.js', () => ({
+  default: {
+    findDepartmentById: jest.fn(), findProgramsByDepartment: jest.fn(),
+    findProgramById: jest.fn(), findProgramByCode: jest.fn(),
+    createProgram: jest.fn(), updateProgram: jest.fn(),
+    findAcademicYearsByProgram: jest.fn(), findAcademicYearById: jest.fn(),
+    findAcademicYearByProgramAndNumber: jest.fn(), createAcademicYear: jest.fn(),
+    updateAcademicYear: jest.fn(), findSectionsByAcademicYear: jest.fn(),
+    findSectionById: jest.fn(), findSectionByAcademicYearAndName: jest.fn(),
+    createSection: jest.fn(), updateSection: jest.fn(),
+    findSubjectsByDepartment: jest.fn(), findSubjectById: jest.fn(),
+    findSubjectByCode: jest.fn(), createSubject: jest.fn(), updateSubject: jest.fn(),
+    findTeachersByDepartment: jest.fn(), findTeacherById: jest.fn(),
+    findTeacherByEmployeeId: jest.fn(), createTeacherWithUser: jest.fn(),
+    updateTeacherStatus: jest.fn(), findAssignmentsByDepartment: jest.fn(),
+    findAssignmentById: jest.fn(), findDuplicateAssignment: jest.fn(),
+    createTeachingAssignment: jest.fn(), updateAssignmentStatus: jest.fn(),
+    findStudentsByDepartment: jest.fn(), findStudentById: jest.fn(),
+    findStudentAttendance: jest.fn(),
+  },
+}));
 
 const { default: app }                = await import('../../src/app.js');
 const { default: request }            = await import('supertest');
