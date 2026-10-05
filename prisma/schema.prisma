@@ -75,6 +75,7 @@ model User {
   phoneNumber  String?
   avatarUrl    String?
   isActive     Boolean   @default(true)
+  mustChangePassword Boolean @default(false)
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -93,6 +94,7 @@ model User {
 
   @@index([email])
   @@index([role])
+  @@index([role, isActive])
   @@map("users")
 }
 
@@ -371,7 +373,11 @@ model AttendanceSession {
   @@index([teachingAssignmentId])
   @@index([teacherId])
   @@index([sectionId])
+  @@index([subjectId])
   @@index([sessionDate])
+  @@index([status])
+  @@index([sectionId, status])
+  @@index([sessionDate, status])
   @@map("attendance_sessions")
 }
 
@@ -396,6 +402,9 @@ model AttendanceRecord {
   @@unique([studentId, sessionId])
   @@index([sessionId])
   @@index([studentId])
+  @@index([status])
+  @@index([sessionId, status])
+  @@index([studentId, status])
   @@map("attendance_records")
 }
 

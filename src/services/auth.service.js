@@ -85,6 +85,7 @@ class AuthService {
         teacherId: user.teacher?.id || null,
         studentId: user.student?.id || null,
         departmentId: user.teacher?.departmentId || user.student?.departmentId || user.headedDepartment?.id || null,
+        mustChangePassword: user.mustChangePassword || false,
       },
     };
   }
@@ -197,7 +198,7 @@ class AuthService {
     }
 
     const newPasswordHash = await hashPassword(newPassword);
-    await userRepository.updatePassword(userId, newPasswordHash);
+    await userRepository.updatePasswordWithFlag(userId, newPasswordHash, false);
 
     // Invalidate all active refresh tokens on password change
     await refreshTokenRepository.revokeAllUserTokens(userId);
@@ -231,6 +232,7 @@ class AuthService {
       lastName: user.lastName,
       phoneNumber: user.phoneNumber,
       avatarUrl: user.avatarUrl,
+      mustChangePassword: user.mustChangePassword || false,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       teacherProfile: user.teacher || null,
