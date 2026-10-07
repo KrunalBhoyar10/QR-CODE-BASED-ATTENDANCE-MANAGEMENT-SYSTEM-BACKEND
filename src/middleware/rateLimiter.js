@@ -4,28 +4,68 @@ import { errorResponse } from '../utils/response.js';
 const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10);
 const maxRequests = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
 
+const isTest = () => process.env.NODE_ENV === 'test';
+
 /**
- * Standard API rate limiter
+ * Standard API rate limiter (global)
+ * Applied to all routes as a baseline.
  */
 export const apiLimiter = rateLimit({
   windowMs,
   max: maxRequests,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: isTest,
   handler: (req, res) => {
     return errorResponse(res, 429, 'Too many requests from this IP, please try again later');
   },
 });
 
 /**
- * Stricter rate limiter for authentication endpoints (prevent brute-force)
+ * Stricter rate limiter for authentication endpoints (prevent brute-force & credential stuffing)
+ * 15 attempts per 15 minutes per IP.
  */
 export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 15 * 60 * 1000, // 15 minutes
   max: 15,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: isTest,
   handler: (req, res) => {
     return errorResponse(res, 429, 'Too many authentication attempts, please try again after 15 minutes');
   },
 });
+
+/**
+ * Attendance marking rate limiter.
+ * A student can only mark attendance a reasonable number of times per minute.
+ * This prevents replay flooding of the attendance endpoint.
+ * 10 attempts per 1 minute per IP.
+ */
+export const attendanceLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: isTest,
+  handler: (req, res) => {
+    return errorResponse(res, 429, 'Too many attendance marking attempts, please slow down');
+  },
+});
+
+/**
+ * Password reset rate limiter.
+ * Prevent enumeration and flooding of the reset endpoint.
+ * 5 attempts per 15 minutes per IP.
+ */
+export const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: isTest,
+  handler: (req, res) => {
+    return errorResponse(res, 429, 'Too many password reset attempts, please try again after 15 minutes');
+  },
+});
+

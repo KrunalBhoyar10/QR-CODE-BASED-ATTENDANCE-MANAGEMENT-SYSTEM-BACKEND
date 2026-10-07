@@ -1,11 +1,13 @@
 import userRepository from '../repositories/user.repository.js';
 import refreshTokenRepository from '../repositories/refreshToken.repository.js';
+import passwordResetTokenRepository from '../repositories/passwordResetToken.repository.js';
 import auditService from './audit.service.js';
 import { hashPassword, comparePassword } from '../utils/passwords.js';
 import {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
+  generateRandomToken,
   hashToken,
 } from '../utils/tokens.js';
 import {
@@ -213,6 +215,98 @@ class AuthService {
     });
 
     return { message: 'Password changed successfully. Please log in again with your new password.' };
+  }
+
+  /**
+   * Request password reset token
+   */
+  async forgotPassword({ email, ipAddress, userAgent }) {
+    const user = await userRepository.findByEmail(email);
+    if (!user) {
+      return { message: 'If an account exists with this email, a password reset link/token has been generated.' };
+    }
+
+    if (!user.isActive) {
+      throw new BadRequestError('Account has been deactivated. Please contact administrator.');
+    }
+
+    await passwordResetTokenRepository.revokeAllForUser(user.id);
+
+    const resetToken = generateRandomToken(32);
+    const tokenHash = hashToken(resetToken);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await passwordResetTokenRepository.create({
+      tokenHash,
+      userId: user.id,
+      expiresAt,
+    });
+
+    await auditService.log({
+      userId: user.id,
+      action: 'PASSWORD_RESET_REQUESTED',
+      entity: 'PasswordResetToken',
+      entityId: user.id,
+      details: { email: user.email },
+      req: { ip: ipAddress, headers: { 'user-agent': userAgent } },
+    });
+
+    // SECURITY: Do NOT return the raw resetToken in the HTTP response.
+    // In production, the token must be delivered out-of-band (email/SMS).
+    // The token is logged here for development convenience ONLY.
+    if (process.env.NODE_ENV !== 'production') {
+      return {
+        message: 'Password reset token generated successfully.',
+        resetToken,                        // Dev only — remove in production email flow
+        expiresAt: expiresAt.toISOString(),
+      };
+    }
+
+    return {
+      message: 'If an account exists with this email, a password reset link/token has been generated.',
+    };
+  }
+
+  /**
+   * Confirm password reset with token
+   */
+  async resetPassword({ token, newPassword, ipAddress, userAgent }) {
+    if (!token) {
+      throw new BadRequestError('Password reset token is required');
+    }
+
+    const tokenHash = hashToken(token);
+    const tokenRecord = await passwordResetTokenRepository.findByTokenHash(tokenHash);
+
+    if (!tokenRecord || tokenRecord.isUsed) {
+      throw new BadRequestError('Invalid or already used password reset token');
+    }
+
+    if (new Date() > new Date(tokenRecord.expiresAt)) {
+      throw new BadRequestError('Password reset token has expired');
+    }
+
+    const user = tokenRecord.user;
+    if (!user || !user.isActive) {
+      throw new BadRequestError('User account is invalid or deactivated');
+    }
+
+    const newPasswordHash = await hashPassword(newPassword);
+    await userRepository.updatePasswordWithFlag(user.id, newPasswordHash, false);
+
+    await passwordResetTokenRepository.markAsUsed(tokenRecord.id);
+    await refreshTokenRepository.revokeAllUserTokens(user.id);
+
+    await auditService.log({
+      userId: user.id,
+      action: 'PASSWORD_RESET_COMPLETED',
+      entity: 'User',
+      entityId: user.id,
+      details: { role: user.role },
+      req: { ip: ipAddress, headers: { 'user-agent': userAgent } },
+    });
+
+    return { message: 'Password has been reset successfully. Please log in with your new password.' };
   }
 
   /**

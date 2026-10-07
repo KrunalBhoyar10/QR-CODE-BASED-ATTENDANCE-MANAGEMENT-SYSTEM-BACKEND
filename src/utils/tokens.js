@@ -1,10 +1,32 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 
-const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'dev_access_fallback_secret_32_chars_min';
-const JWT_ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '15m';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'dev_refresh_fallback_secret_32_chars_min';
+// Insecure fallback secrets are ONLY permitted in development/test environments.
+// In production, JWT_ACCESS_SECRET and JWT_REFRESH_SECRET MUST be set to strong,
+// unique values (>= 32 characters) and must not match the known dev defaults.
+const DEV_ACCESS_FALLBACK  = 'dev_access_fallback_secret_32_chars_min';
+const DEV_REFRESH_FALLBACK = 'dev_refresh_fallback_secret_32_chars_min';
+
+const JWT_ACCESS_SECRET  = process.env.JWT_ACCESS_SECRET  || DEV_ACCESS_FALLBACK;
+const JWT_ACCESS_EXPIRY  = process.env.JWT_ACCESS_EXPIRY  || '15m';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || DEV_REFRESH_FALLBACK;
 const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
+
+// Fail fast in production if secrets are missing or still using dev defaults
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_ACCESS_SECRET || process.env.JWT_ACCESS_SECRET === DEV_ACCESS_FALLBACK) {
+    throw new Error('[SECURITY] JWT_ACCESS_SECRET is not configured. Set a strong secret in production.');
+  }
+  if (!process.env.JWT_REFRESH_SECRET || process.env.JWT_REFRESH_SECRET === DEV_REFRESH_FALLBACK) {
+    throw new Error('[SECURITY] JWT_REFRESH_SECRET is not configured. Set a strong secret in production.');
+  }
+  if (JWT_ACCESS_SECRET.length < 32) {
+    throw new Error('[SECURITY] JWT_ACCESS_SECRET must be at least 32 characters long.');
+  }
+  if (JWT_REFRESH_SECRET.length < 32) {
+    throw new Error('[SECURITY] JWT_REFRESH_SECRET must be at least 32 characters long.');
+  }
+}
 
 /**
  * Generate Access Token

@@ -1,5 +1,6 @@
 import { checkDatabaseConnection } from '../lib/prisma.js';
 import { checkRedisConnection } from '../lib/redis.js';
+import logger from '../lib/logger.js';
 
 class HealthService {
   async getHealthStatus() {
@@ -9,6 +10,14 @@ class HealthService {
       checkDatabaseConnection(),
       checkRedisConnection(),
     ]);
+
+    // Log any errors server-side but do NOT expose internal error details in the API response.
+    if (!dbStatus.isConnected && dbStatus.error) {
+      logger.error('[Health] PostgreSQL connection failed', dbStatus.error);
+    }
+    if (!redisStatus.isConnected && redisStatus.error) {
+      logger.warn('[Health] Redis connection failed', redisStatus.error);
+    }
 
     const isHealthy = dbStatus.isConnected;
 
@@ -22,12 +31,13 @@ class HealthService {
         database: {
           type: 'PostgreSQL',
           status: dbStatus.isConnected ? 'connected' : 'disconnected',
-          ...(dbStatus.error && { error: dbStatus.error }),
+          // Do NOT expose raw error messages in production (may reveal internal details)
+          ...(process.env.NODE_ENV !== 'production' && dbStatus.error && { error: dbStatus.error }),
         },
         cache: {
           type: 'Redis',
           status: redisStatus.isConnected ? 'connected' : 'disconnected',
-          ...(redisStatus.error && { error: redisStatus.error }),
+          ...(process.env.NODE_ENV !== 'production' && redisStatus.error && { error: redisStatus.error }),
         },
       },
     };

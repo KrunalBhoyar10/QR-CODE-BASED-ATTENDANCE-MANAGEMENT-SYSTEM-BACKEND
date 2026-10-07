@@ -3,18 +3,32 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import crypto from 'crypto';
 
 import { apiLimiter } from './middleware/rateLimiter.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import healthRoutes from './routes/health.routes.js';
 import apiV1Routes from './routes/index.routes.js';
+import logger from './lib/logger.js';
 
 const app = express();
 
 // Trust proxy for reverse proxies (Nginx, Cloudflare, Docker)
+// Only trust the FIRST proxy (most setups). Adjust if using multiple hops.
 app.set('trust proxy', 1);
 
+// ─────────────────────────────────────────────────────────
+// Request ID Middleware (observability)
+// ─────────────────────────────────────────────────────────
+app.use((req, res, next) => {
+  req.id = crypto.randomUUID();
+  res.setHeader('X-Request-Id', req.id);
+  next();
+});
+
+// ─────────────────────────────────────────────────────────
 // Security Headers via Helmet
+// ─────────────────────────────────────────────────────────
 app.use(
   helmet({
     contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
@@ -22,44 +36,69 @@ app.use(
   })
 );
 
+// ─────────────────────────────────────────────────────────
 // CORS Configuration
-const allowedOrigins = (process.env.CORS_ORIGIN || '*')
-  .split(',')
-  .map((origin) => origin.trim());
+// In production, CORS_ORIGIN must be explicitly set.
+// Wildcard (*) with credentials is not allowed by browsers and is insecure.
+// ─────────────────────────────────────────────────────────
+const rawOrigins = (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean);
+const allowWildcard = rawOrigins.includes('*');
+
+if (process.env.NODE_ENV === 'production' && allowWildcard) {
+  logger.warn(
+    '[SECURITY] CORS_ORIGIN is set to wildcard (*) in production. ' +
+    'This disables credential support in browsers. Set explicit origin(s).'
+  );
+}
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error('CORS policy: Not allowed by CORS'));
+      // Allow non-browser tool requests (Postman, server-to-server) without Origin
+      if (!origin) return callback(null, true);
+      if (allowWildcard) return callback(null, true);
+      if (rawOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error(`CORS policy: origin '${origin}' is not allowed`));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Request-Id'],
   })
 );
 
+// ─────────────────────────────────────────────────────────
 // Request Parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Keep body limit small — this is a REST API, not a file upload service.
+// Large payloads (e.g. face images) should go through a dedicated upload endpoint.
+// ─────────────────────────────────────────────────────────
+app.use(express.json({ limit: '512kb' }));
+app.use(express.urlencoded({ extended: true, limit: '512kb' }));
 
-// HTTP Logging
+// ─────────────────────────────────────────────────────────
+// HTTP Logging (skip in test; use structured format in production)
+// ─────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 }
 
-// Global Rate Limiter
+// ─────────────────────────────────────────────────────────
+// Global Rate Limiter (applies to all routes below)
+// ─────────────────────────────────────────────────────────
 app.use(apiLimiter);
 
-// Health check endpoint (Public)
+// ─────────────────────────────────────────────────────────
+// Health check endpoint (Public — unauthenticated)
+// ─────────────────────────────────────────────────────────
 app.use('/health', healthRoutes);
 
+// ─────────────────────────────────────────────────────────
 // API v1 Routes
+// ─────────────────────────────────────────────────────────
 app.use('/api/v1', apiV1Routes);
 
+// ─────────────────────────────────────────────────────────
 // Root Welcome Endpoint
+// ─────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({
     success: true,
@@ -69,10 +108,14 @@ app.get('/', (req, res) => {
   });
 });
 
+// ─────────────────────────────────────────────────────────
 // 404 Handler
+// ─────────────────────────────────────────────────────────
 app.use(notFoundHandler);
 
-// Centralized Error Handling
+// ─────────────────────────────────────────────────────────
+// Centralized Error Handling (must be last)
+// ─────────────────────────────────────────────────────────
 app.use(errorHandler);
 
 export default app;

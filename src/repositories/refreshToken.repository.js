@@ -45,6 +45,11 @@ class RefreshTokenRepository {
     });
   }
 
+  // Alias: some services call this as revokeAllForUser
+  async revokeAllForUser(userId) {
+    return this.revokeAllUserTokens(userId);
+  }
+
   async deleteExpiredTokens() {
     return prisma.refreshToken.deleteMany({
       where: {

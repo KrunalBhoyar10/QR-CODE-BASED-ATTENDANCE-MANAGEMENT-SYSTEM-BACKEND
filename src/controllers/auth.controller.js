@@ -104,3 +104,39 @@ export const getMe = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Controller: Forgot Password Request
+ */
+export const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const ipAddress = req.ip || req.headers['x-forwarded-for'];
+    const userAgent = req.headers['user-agent'];
+
+    const result = await authService.forgotPassword({ email, ipAddress, userAgent });
+    return successResponse(res, 200, result.message, {
+      ...(result.resetToken && { resetToken: result.resetToken }),
+      ...(result.expiresAt && { expiresAt: result.expiresAt }),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller: Reset Password Confirm
+ */
+export const resetPassword = async (req, res, next) => {
+  try {
+    const { token, newPassword } = req.body;
+    const ipAddress = req.ip || req.headers['x-forwarded-for'];
+    const userAgent = req.headers['user-agent'];
+
+    const result = await authService.resetPassword({ token, newPassword, ipAddress, userAgent });
+    return successResponse(res, 200, result.message);
+  } catch (error) {
+    next(error);
+  }
+};
+

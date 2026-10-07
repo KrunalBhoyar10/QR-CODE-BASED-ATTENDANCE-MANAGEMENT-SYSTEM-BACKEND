@@ -40,3 +40,7 @@ tmp/
 # Prisma SQLite dev artifacts (if any used in test)
 *.db
 *.db-journal
+
+# Frontend sibling junction
+frontend/
+

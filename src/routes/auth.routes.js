@@ -2,11 +2,13 @@ import { Router } from 'express';
 import * as authController from '../controllers/auth.controller.js';
 import validate from '../middleware/validate.middleware.js';
 import { authenticateJwt } from '../middleware/auth.middleware.js';
-import { authLimiter } from '../middleware/rateLimiter.js';
+import { authLimiter, passwordResetLimiter } from '../middleware/rateLimiter.js';
 import {
   loginSchema,
   refreshTokenSchema,
   changePasswordSchema,
+  resetPasswordRequestSchema,
+  resetPasswordConfirmSchema,
 } from '../validators/auth.validator.js';
 
 const router = Router();
@@ -33,6 +35,20 @@ router.post('/refresh-token', validate(refreshTokenSchema), authController.refre
 router.post('/logout', authController.logout);
 
 /**
+ * @route   POST /api/v1/auth/forgot-password
+ * @desc    Request password reset token (delivers via email in production)
+ * @access  Public
+ */
+router.post('/forgot-password', passwordResetLimiter, validate(resetPasswordRequestSchema), authController.forgotPassword);
+
+/**
+ * @route   POST /api/v1/auth/reset-password
+ * @desc    Reset user password using token
+ * @access  Public
+ */
+router.post('/reset-password', passwordResetLimiter, validate(resetPasswordConfirmSchema), authController.resetPassword);
+
+/**
  * @route   GET /api/v1/auth/me
  * @desc    Get current user profile
  * @access  Authenticated
@@ -44,6 +60,6 @@ router.get('/me', authenticateJwt, authController.getMe);
  * @desc    Change password and invalidate prior sessions
  * @access  Authenticated
  */
-router.post('/change-password', authenticateJwt, validate(changePasswordSchema), authController.changePassword);
+router.post('/change-password', authenticateJwt, authLimiter, validate(changePasswordSchema), authController.changePassword);
 
 export default router;

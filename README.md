@@ -41,12 +41,19 @@ This project delivers a **full production backend** with two completed vertical 
   - Dual-tier rate limiting (API-level & strict auth brute-force protection)
 - **Infrastructure**: Resilient Prisma + Redis (`ioredis`) singletons, live `/health` check.
 
-### Principal Module
-- **Profile Management**: View and update own profile; secure password change.
-- **HOD Management**: Create HOD accounts with temporary password and `mustChangePassword` enforcement; list, view, activate/deactivate HODs; re-assign HODs to different departments.
-- **Academic Hierarchy Navigation**: Browse the full Department → Program → Academic Year → Section → Subject tree within the principal's scope.
-- **Attendance Analytics**: Institution-wide aggregated reports — overall summary, department-wise, program-wise, academic-year-wise, section-wise, subject-wise breakdowns, plus low-attendance student and subject alerts.
-- **Automated Testing Suite**: Jest/Supertest suites covering 38 tests across 6 test files (unit + integration).
+### Student Module & Attendance Marking Flow
+- **Profile & Identity**: View and update profile, unique institutional identity (`studentId`, `rollNumber`, `enrollmentNumber`, `email`), view academic hierarchy (`department`, `program`, `academicYear`, `section`) and active `StudentEnrollment` records.
+- **Password Management**: Secure password change and self-service password reset workflow (`/forgot-password` and `/reset-password` with short-lived tokens).
+- **Fraud-Resistant Attendance Marking**: Complete server-controlled attendance marking workflow (`POST /api/v1/student/attendance/mark`):
+  - **Authentication**: JWT validation & STUDENT role verification.
+  - **Session Validation**: Verifies active Redis cache state & PostgreSQL session status, TTL, and teaching assignment status.
+  - **Cryptographic QR Validation**: Validates dynamic session token against hashed secrets; client-side claims like `qrValid=true` are ignored.
+  - **Strict Enrollment Verification**: Server verifies student's Department, Program, Academic Year, Section, and active `StudentEnrollment` against session parameters. Cross-section or cross-department attempts are strictly rejected.
+  - **Server-Side GPS Geofencing**: Computes exact distance using the spherical Haversine formula against configured session latitude/longitude and allowed radius. Client claims like `locationVerified=true` are ignored.
+  - **Modular Face Verification**: Pluggable `FaceVerificationService` interface verifying facial biometrics without storing raw image data.
+  - **Duplicate Prevention & Race Condition Safety**: Dual-level application check and PostgreSQL atomic transaction handling unique constraint (`UNIQUE(studentId, sessionId)`).
+- **Attendance Analytics & History**: Aggregated student summary (total sessions, attended, percentage, low attendance warnings), subject-wise breakdown, and paginated attendance history.
+- **Automated Testing Suite**: Jest/Supertest suites covering 112 tests across 9 test files.
 
 ---
 
@@ -792,7 +799,7 @@ Run the automated test suite with Jest:
 npm test
 ```
 
-The test suite covers **90 tests across 8 test files**:
+The test suite covers **112 tests across 9 test files**:
 
 | File | What it covers |
 |---|---|
@@ -804,6 +811,7 @@ The test suite covers **90 tests across 8 test files**:
 | `integration/principal.test.js` | Principal profile, HOD CRUD, status management, analytics, hierarchy navigation |
 | `integration/hod.test.js` | HOD profile, program/year/section/subject/teacher/assignment CRUD, department attendance analytics |
 | `integration/teacher.test.js` | Teacher profile & password, TeachingAssignment authorization boundaries, session creation with Redis TTL & secret-free QR tokens, session expiry, manual close, and DB attendance reports |
+| `integration/student.test.js` | Student identity & profile, enrollment validation, QR session token verification, Haversine GPS geofencing, modular face verification, duplicate prevention, PostgreSQL transaction safety, and attendance summary/history reporting |
 
 ---
 

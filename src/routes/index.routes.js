@@ -4,6 +4,7 @@ import academicRoutes from './academic.routes.js';
 import principalRoutes from './principal.routes.js';
 import hodRoutes from './hod.routes.js';
 import teacherRoutes from './teacher.routes.js';
+import studentRoutes from './student.routes.js';
 
 const router = Router();
 
@@ -13,6 +14,7 @@ router.use('/academic', academicRoutes);
 router.use('/principal', principalRoutes);
 router.use('/hod', hodRoutes);
 router.use('/teacher', teacherRoutes);
+router.use('/student', studentRoutes);
 
 // Base route info
 router.get('/', (req, res) => {

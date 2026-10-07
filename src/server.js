@@ -3,10 +3,14 @@ import app from './app.js';
 import logger from './lib/logger.js';
 import { checkDatabaseConnection, prisma } from './lib/prisma.js';
 import { checkRedisConnection, redis } from './lib/redis.js';
+import { validateEnv } from './utils/validateEnv.js';
 
 const PORT = parseInt(process.env.PORT || '5000', 10);
 
 const startServer = async () => {
+  // Validate all required environment variables before starting
+  validateEnv();
+
   logger.info('Initializing QR Code Attendance Backend System...');
 
   // Database connectivity check
