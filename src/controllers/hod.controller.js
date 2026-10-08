@@ -288,6 +288,24 @@ export const createTeachingAssignment = async (req, res, next) => {
   }
 };
 
+export const updateTeachingAssignment = async (req, res, next) => {
+  try {
+    const updated = await hodService.updateTeachingAssignment(req.user.id, req.params.id, req.body, req);
+    return successResponse(res, 200, 'Teaching assignment updated successfully', updated);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteTeachingAssignment = async (req, res, next) => {
+  try {
+    const result = await hodService.deleteTeachingAssignment(req.user.id, req.params.id, req);
+    return successResponse(res, 200, result.message);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const updateAssignmentStatus = async (req, res, next) => {
   try {
     const { status } = req.body;

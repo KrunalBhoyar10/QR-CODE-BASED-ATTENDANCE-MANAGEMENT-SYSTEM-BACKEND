@@ -36,6 +36,7 @@ import {
   // Teaching Assignments
   createTeachingAssignmentSchema,
   assignmentIdParamSchema,
+  updateTeachingAssignmentSchema,
   updateAssignmentStatusSchema,
   listAssignmentsQuerySchema,
   // Students
@@ -123,6 +124,17 @@ router.patch(
   validate(updateAssignmentStatusSchema),
   hodController.updateAssignmentStatus
 );
+router.patch(
+  '/teaching-assignments/:id',
+  validate(updateTeachingAssignmentSchema),
+  hodController.updateTeachingAssignment
+);
+router.delete(
+  '/teaching-assignments/:id',
+  validate(assignmentIdParamSchema),
+  hodController.deleteTeachingAssignment
+);
+
 
 // ============================================================
 // 8. STUDENT MANAGEMENT (view only)

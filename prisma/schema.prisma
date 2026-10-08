@@ -180,11 +180,12 @@ model Program {
 }
 
 model AcademicYear {
-  id         String   @id @default(uuid())
-  yearNumber Int      // e.g. 1, 2, 3, 4
-  label      String   // e.g. "1st Year", "2nd Year"
-  programId  String
-  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  id             String   @id @default(uuid())
+  yearNumber     Int      // e.g. 1, 2, 3, 4
+  label          String   // e.g. "1st Year", "2nd Year"
+  semesterCount  Int      @default(2)  // e.g. 2 semesters per year
+  programId      String
+  program        Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -201,13 +202,15 @@ model AcademicYear {
 }
 
 model Section {
-  id             String       @id @default(uuid())
-  name           String       // e.g. "A", "B"
-  capacity       Int?
-  academicYearId String
-  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id              String    @id @default(uuid())
+  name            String    // e.g. "A", "B"
+  capacity        Int?
+  academicYearId  String
+  academicYear    AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  classTeacherId  String?
+  classTeacher    Teacher?  @relation("ClassTeacher", fields: [classTeacherId], references: [id], onDelete: SetNull)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   // Hierarchy relations
   students            Student[]
@@ -238,6 +241,7 @@ model Teacher {
   // Relations
   teachingAssignments TeachingAssignment[]
   attendanceSessions  AttendanceSession[]
+  classTeacherOf      Section[]            @relation("ClassTeacher")
 
   @@index([departmentId])
   @@map("teachers")

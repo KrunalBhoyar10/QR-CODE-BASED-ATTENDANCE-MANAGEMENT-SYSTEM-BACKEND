@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DEFAULT_LOW_ATTENDANCE_THRESHOLD } from '../constants/attendance.constants.js';
+import { orgEmailField } from '../utils/emailDomain.js';
 
 // ─────────────────────────────────────────────────────────
 // Common reusable pieces
@@ -83,7 +84,8 @@ export const createAcademicYearSchema = z.object({
   body: z.object({
     programId: z.string().uuid('Invalid program ID format'),
     yearNumber: z.number().int().min(1, 'Year number must be at least 1').max(10),
-    label: z.string().trim().min(1, 'Label is required').max(50),
+    semesterCount: z.number().int().min(1).max(8).optional().default(2),
+    label: z.string().trim().min(1).max(50).optional(),
   }),
 });
 
@@ -113,6 +115,7 @@ export const createSectionSchema = z.object({
     academicYearId: z.string().uuid('Invalid academic year ID format'),
     name: z.string().trim().min(1, 'Section name is required').max(10),
     capacity: z.number().int().min(1).max(500).optional().nullable(),
+    classTeacherId: z.string().uuid('Invalid teacher ID format').optional().nullable(),
   }),
 });
 
@@ -123,6 +126,7 @@ export const updateSectionSchema = z.object({
   body: z.object({
     name: z.string().trim().min(1).max(10).optional(),
     capacity: z.number().int().min(1).max(500).optional().nullable(),
+    classTeacherId: z.string().uuid('Invalid teacher ID format').optional().nullable(),
   }),
 });
 
@@ -145,6 +149,7 @@ export const createSubjectSchema = z.object({
     credits: z.number().int().min(1).max(10).optional().nullable(),
     isActive: z.boolean().optional().default(true),
     programId: z.string().uuid('Invalid program ID format'),
+    academicYearId: z.string().uuid('Invalid academic year ID format').optional().nullable(),
   }),
 });
 
@@ -177,7 +182,7 @@ export const createTeacherSchema = z.object({
   body: z.object({
     firstName: z.string().trim().min(1, 'First name is required').max(50),
     lastName: z.string().trim().min(1, 'Last name is required').max(50),
-    email: z.string().trim().email('Invalid email address format'),
+    email: orgEmailField(),
     employeeId: z.string().trim().min(1, 'Employee ID is required').max(30),
     designation: z.string().trim().max(100).optional().nullable(),
     password: passwordField.optional(),
@@ -232,6 +237,21 @@ export const createTeachingAssignmentSchema = z.object({
     programId: z.string().uuid('Invalid program ID format'),
     academicYearId: z.string().uuid('Invalid academic year ID format'),
     sectionId: z.string().uuid('Invalid section ID format'),
+    validFrom: z.string().datetime({ message: 'validFrom must be a valid ISO datetime' }).optional(),
+    validTo: z.string().datetime({ message: 'validTo must be a valid ISO datetime' }).optional(),
+  }),
+});
+
+export const updateTeachingAssignmentSchema = z.object({
+  params: z.object({
+    id: z.string().uuid('Invalid assignment ID format'),
+  }),
+  body: z.object({
+    teacherId: z.string().uuid('Invalid teacher ID format').optional(),
+    subjectId: z.string().uuid('Invalid subject ID format').optional(),
+    programId: z.string().uuid('Invalid program ID format').optional(),
+    academicYearId: z.string().uuid('Invalid academic year ID format').optional(),
+    sectionId: z.string().uuid('Invalid section ID format').optional(),
     validFrom: z.string().datetime({ message: 'validFrom must be a valid ISO datetime' }).optional(),
     validTo: z.string().datetime({ message: 'validTo must be a valid ISO datetime' }).optional(),
   }),

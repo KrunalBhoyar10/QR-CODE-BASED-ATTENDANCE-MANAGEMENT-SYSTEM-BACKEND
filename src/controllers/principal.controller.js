@@ -143,6 +143,34 @@ export const resetHodPassword = async (req, res, next) => {
 };
 
 /**
+ * Controller: Delete HOD
+ */
+export const deleteHod = async (req, res, next) => {
+  try {
+    const result = await principalService.deleteHod({
+      principalId: req.user.id,
+      hodId: req.params.id,
+      req,
+    });
+    return successResponse(res, 200, result.message);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller: Create Department
+ */
+export const createDepartment = async (req, res, next) => {
+  try {
+    const department = await principalService.createDepartment(req.body);
+    return successResponse(res, 201, 'Department created successfully', department);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Controller: Get Departments
  */
 export const getDepartments = async (req, res, next) => {

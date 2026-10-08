@@ -16,6 +16,7 @@ import {
   departmentIdParamSchema,
   programIdParamSchema,
   academicYearIdParamSchema,
+  createDepartmentSchema,
 } from '../validators/principal.validator.js';
 
 const router = Router();
@@ -40,10 +41,12 @@ router.get('/hods/:id', validate(hodIdParamSchema), principalController.getHodBy
 router.patch('/hods/:id', validate(updateHodSchema), principalController.updateHod);
 router.patch('/hods/:id/status', validate(updateHodStatusSchema), principalController.updateHodStatus);
 router.post('/hods/:id/reset-password', validate(resetHodPasswordSchema), principalController.resetHodPassword);
+router.delete('/hods/:id', validate(hodIdParamSchema), principalController.deleteHod);
 
 // ==========================================
 // 3. ACADEMIC HIERARCHY NAVIGATION
 // ==========================================
+router.post('/departments', validate(createDepartmentSchema), principalController.createDepartment);
 router.get('/departments', principalController.getDepartments);
 router.get('/departments/:id', validate(departmentIdParamSchema), principalController.getDepartmentById);
 router.get('/departments/:id/programs', validate(departmentIdParamSchema), principalController.getProgramsByDepartment);

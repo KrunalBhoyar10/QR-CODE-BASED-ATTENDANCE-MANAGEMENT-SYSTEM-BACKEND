@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { orgEmailField } from '../utils/emailDomain.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -29,7 +30,7 @@ export const changeStudentPasswordSchema = z.object({
 
 export const forgotPasswordSchema = z.object({
   body: z.object({
-    email: z.string().email('Valid email address is required').toLowerCase().trim(),
+    email: orgEmailField(),
   }),
 });
 

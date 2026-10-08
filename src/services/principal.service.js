@@ -401,10 +401,43 @@ class PrincipalService {
   }
 
   /**
+   * Delete HOD permanently
+   */
+  async deleteHod({ principalId, hodId, req }) {
+    const existingHod = await userRepository.findHodById(hodId);
+    if (!existingHod) {
+      throw new NotFoundError(`HOD with ID '${hodId}' not found`);
+    }
+
+    // Revoke all sessions first
+    await refreshTokenRepository.revokeAllUserTokens(hodId);
+
+    await userRepository.deleteHod(hodId);
+
+    await auditService.log({
+      userId: principalId,
+      action: 'HOD_DELETED',
+      entity: 'User',
+      entityId: hodId,
+      details: { email: existingHod.email },
+      req,
+    });
+
+    return { message: 'HOD deleted successfully' };
+  }
+
+  /**
    * Academic Hierarchy: View Departments
    */
   async getDepartments() {
     return departmentRepository.findAll();
+  }
+
+  /**
+   * Academic Hierarchy: Create Department
+   */
+  async createDepartment({ name, code, description }) {
+    return departmentRepository.create({ name, code, description });
   }
 
   /**

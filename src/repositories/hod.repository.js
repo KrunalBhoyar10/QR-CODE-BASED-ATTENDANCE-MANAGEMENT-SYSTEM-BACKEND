@@ -138,6 +138,9 @@ class HodRepository {
     return prisma.section.findMany({
       where: { academicYearId },
       include: {
+        classTeacher: {
+          include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
+        },
         _count: { select: { students: true, teachingAssignments: true, attendanceSessions: true } },
       },
       orderBy: { name: 'asc' },
@@ -167,6 +170,9 @@ class HodRepository {
       data: { ...data, name: data.name.toUpperCase().trim() },
       include: {
         academicYear: { select: { id: true, label: true, yearNumber: true } },
+        classTeacher: {
+          include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
+        },
       },
     });
   }
@@ -180,6 +186,9 @@ class HodRepository {
       },
       include: {
         academicYear: { select: { id: true, label: true, yearNumber: true } },
+        classTeacher: {
+          include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
+        },
       },
     });
   }
@@ -475,6 +484,31 @@ class HodRepository {
         section: { select: { id: true, name: true } },
         department: { select: { id: true, name: true, code: true } },
       },
+    });
+  }
+
+  async updateTeachingAssignment(assignmentId, data) {
+    return prisma.teachingAssignment.update({
+      where: { id: assignmentId },
+      data,
+      include: {
+        teacher: {
+          include: {
+            user: { select: { id: true, firstName: true, lastName: true, email: true } },
+          },
+        },
+        subject: { select: { id: true, name: true, code: true } },
+        program: { select: { id: true, name: true, code: true } },
+        academicYear: { select: { id: true, label: true, yearNumber: true } },
+        section: { select: { id: true, name: true } },
+        department: { select: { id: true, name: true, code: true } },
+      },
+    });
+  }
+
+  async deleteTeachingAssignment(assignmentId) {
+    return prisma.teachingAssignment.delete({
+      where: { id: assignmentId },
     });
   }
 

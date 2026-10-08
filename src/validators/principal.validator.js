@@ -1,11 +1,20 @@
 import { z } from 'zod';
 import { DEFAULT_LOW_ATTENDANCE_THRESHOLD } from '../constants/attendance.constants.js';
+import { orgEmailField, orgEmailFieldOptional } from '../utils/emailDomain.js';
+
+export const createDepartmentSchema = z.object({
+  body: z.object({
+    name: z.string().trim().min(1, 'Department name is required').max(100),
+    code: z.string().trim().min(1, 'Department code is required').max(20),
+    description: z.string().trim().optional().nullable(),
+  }),
+});
 
 export const createHodSchema = z.object({
   body: z.object({
     firstName: z.string().trim().min(1, 'First name is required').max(50),
     lastName: z.string().trim().min(1, 'Last name is required').max(50),
-    email: z.string().trim().email('Invalid email address format'),
+    email: orgEmailField(),
     departmentId: z.string().uuid('Invalid department ID format'),
     password: z
       .string()
@@ -27,7 +36,7 @@ export const updateHodSchema = z.object({
   body: z.object({
     firstName: z.string().trim().min(1).max(50).optional(),
     lastName: z.string().trim().min(1).max(50).optional(),
-    email: z.string().trim().email('Invalid email address format').optional(),
+    email: orgEmailFieldOptional(),
     departmentId: z.string().uuid('Invalid department ID format').optional(),
     phoneNumber: z.string().trim().optional().nullable(),
     isActive: z.boolean().optional(),

@@ -270,7 +270,8 @@ class HodService {
 
     const academicYear = await hodRepository.createAcademicYear({
       yearNumber: data.yearNumber,
-      label: data.label.trim(),
+      label: data.label ? data.label.trim() : `Year ${data.yearNumber}`,
+      semesterCount: data.semesterCount ?? 2,
       programId: data.programId,
     });
 
@@ -359,6 +360,7 @@ class HodService {
       name: data.name,
       capacity: data.capacity || null,
       academicYearId: data.academicYearId,
+      classTeacherId: data.classTeacherId || null,
     });
 
     await auditService.log({
@@ -397,6 +399,7 @@ class HodService {
     const updated = await hodRepository.updateSection(sectionId, {
       ...(data.name !== undefined && { name: data.name }),
       ...(data.capacity !== undefined && { capacity: data.capacity }),
+      ...(data.classTeacherId !== undefined && { classTeacherId: data.classTeacherId || null }),
     });
 
     await auditService.log({
@@ -775,6 +778,130 @@ class HodService {
     });
 
     return assignment;
+  }
+
+  async updateTeachingAssignment(hodUserId, assignmentId, data, req) {
+    const departmentId = await resolveHodDepartment(hodUserId);
+    const assignment = await hodRepository.findAssignmentById(assignmentId);
+    if (!assignment) throw new NotFoundError(`Teaching assignment '${assignmentId}' not found`);
+    if (assignment.departmentId !== departmentId) {
+      throw new ForbiddenError('You do not have access to this assignment');
+    }
+
+    const teacherId = data.teacherId ?? assignment.teacherId;
+    const subjectId = data.subjectId ?? assignment.subjectId;
+    const programId = data.programId ?? assignment.programId;
+    const academicYearId = data.academicYearId ?? assignment.academicYearId;
+    const sectionId = data.sectionId ?? assignment.sectionId;
+
+    if (data.teacherId && data.teacherId !== assignment.teacherId) {
+      const teacher = await hodRepository.findTeacherById(teacherId);
+      if (!teacher) throw new NotFoundError(`Teacher '${teacherId}' not found`);
+      if (teacher.departmentId !== departmentId) {
+        throw new ForbiddenError('Teacher does not belong to your department');
+      }
+      if (!teacher.user.isActive) {
+        throw new BadRequestError('Teacher is inactive. Activate the teacher before assigning');
+      }
+    }
+
+    if (data.subjectId && data.subjectId !== assignment.subjectId) {
+      const subject = await hodRepository.findSubjectById(subjectId);
+      if (!subject) throw new NotFoundError(`Subject '${subjectId}' not found`);
+      if (subject.departmentId !== departmentId) {
+        throw new ForbiddenError('Subject does not belong to your department');
+      }
+      if (!subject.isActive) {
+        throw new BadRequestError('Subject is inactive. Activate the subject before assigning');
+      }
+    }
+
+    if (data.programId && data.programId !== assignment.programId) {
+      const program = await hodRepository.findProgramById(programId);
+      if (!program) throw new NotFoundError(`Program '${programId}' not found`);
+      if (program.departmentId !== departmentId) {
+        throw new ForbiddenError('Program does not belong to your department');
+      }
+      if (!program.isActive) {
+        throw new BadRequestError('Program is inactive');
+      }
+    }
+
+    if (academicYearId !== assignment.academicYearId || programId !== assignment.programId) {
+      const academicYear = await hodRepository.findAcademicYearById(academicYearId);
+      if (!academicYear) throw new NotFoundError(`Academic year '${academicYearId}' not found`);
+      if (academicYear.programId !== programId) {
+        throw new BadRequestError('Academic year does not belong to the specified program');
+      }
+    }
+
+    if (sectionId !== assignment.sectionId || academicYearId !== assignment.academicYearId) {
+      const section = await hodRepository.findSectionById(sectionId);
+      if (!section) throw new NotFoundError(`Section '${sectionId}' not found`);
+      if (section.academicYearId !== academicYearId) {
+        throw new BadRequestError('Section does not belong to the specified academic year');
+      }
+    }
+
+    if (
+      teacherId !== assignment.teacherId ||
+      subjectId !== assignment.subjectId ||
+      sectionId !== assignment.sectionId ||
+      academicYearId !== assignment.academicYearId
+    ) {
+      const duplicate = await hodRepository.findDuplicateAssignment({
+        teacherId,
+        subjectId,
+        sectionId,
+        academicYearId,
+      });
+      if (duplicate && duplicate.id !== assignmentId) {
+        throw new ConflictError(
+          'A teaching assignment already exists for this teacher, subject, section, and academic year'
+        );
+      }
+    }
+
+    const updated = await hodRepository.updateTeachingAssignment(assignmentId, {
+      teacherId,
+      subjectId,
+      programId,
+      academicYearId,
+      sectionId,
+    });
+
+    await auditService.log({
+      userId: hodUserId,
+      action: 'HOD_TEACHING_ASSIGNMENT_UPDATED',
+      entity: 'TeachingAssignment',
+      entityId: assignmentId,
+      details: { teacherId, subjectId, programId, academicYearId, sectionId, departmentId },
+      req,
+    });
+
+    return updated;
+  }
+
+  async deleteTeachingAssignment(hodUserId, assignmentId, req) {
+    const departmentId = await resolveHodDepartment(hodUserId);
+    const assignment = await hodRepository.findAssignmentById(assignmentId);
+    if (!assignment) throw new NotFoundError(`Teaching assignment '${assignmentId}' not found`);
+    if (assignment.departmentId !== departmentId) {
+      throw new ForbiddenError('You do not have access to this assignment');
+    }
+
+    await hodRepository.deleteTeachingAssignment(assignmentId);
+
+    await auditService.log({
+      userId: hodUserId,
+      action: 'HOD_TEACHING_ASSIGNMENT_DELETED',
+      entity: 'TeachingAssignment',
+      entityId: assignmentId,
+      details: { departmentId },
+      req,
+    });
+
+    return { message: 'Teaching assignment deleted successfully' };
   }
 
   async updateAssignmentStatus(hodUserId, assignmentId, status, req) {
