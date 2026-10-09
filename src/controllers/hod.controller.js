@@ -1,3 +1,30 @@
+export const getMyDepartment = async (req, res, next) => {
+  try {
+    const department = await hodService.getMyDepartment(req.user.id);
+    return successResponse(res, 200, 'Department retrieved successfully', department);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listDepartments = async (req, res, next) => {
+  try {
+    const departments = await hodService.listDepartments(req.user.id);
+    return successResponse(res, 200, 'Departments retrieved successfully', departments);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getDepartmentPrograms = async (req, res, next) => {
+  try {
+    const programs = await hodService.getDepartmentPrograms(req.user.id, req.params.departmentId);
+    return successResponse(res, 200, 'Department programs retrieved successfully', programs);
+  } catch (error) {
+    next(error);
+  }
+};
+
 import hodService from '../services/hod.service.js';
 import { successResponse } from '../utils/response.js';
 
@@ -163,6 +190,15 @@ export const updateSection = async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────
 // 5. Subjects
+export const deleteSection = async (req, res, next) => {
+  try {
+    const result = await hodService.deleteSection(req.user.id, req.params.id, req);
+    return successResponse(res, 200, result.message);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ─────────────────────────────────────────────────────────
 
 export const listSubjects = async (req, res, next) => {

@@ -5,6 +5,7 @@ import principalRoutes from './principal.routes.js';
 import hodRoutes from './hod.routes.js';
 import teacherRoutes from './teacher.routes.js';
 import studentRoutes from './student.routes.js';
+import registrationRoutes from './registration.routes.js';
 
 const router = Router();
 
@@ -15,6 +16,9 @@ router.use('/principal', principalRoutes);
 router.use('/hod', hodRoutes);
 router.use('/teacher', teacherRoutes);
 router.use('/student', studentRoutes);
+
+// Public student self-registration (no auth required)
+router.use('/register', registrationRoutes);
 
 // Base route info
 router.get('/', (req, res) => {

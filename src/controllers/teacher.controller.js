@@ -158,4 +158,22 @@ export const getSessionAttendance = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};export const getStudentsBySection = async (req, res, next) => {
+  try {
+    const students = await teacherService.getStudentsBySection(req.user.id, req.params.sectionId);
+    return successResponse(res, 200, 'Section students retrieved successfully', students);
+  } catch (error) {
+    next(error);
+  }
 };
+
+export const deleteStudent = async (req, res, next) => {
+  try {
+    const result = await teacherService.deleteStudent(req.user.id, req.params.studentId, req);
+    return successResponse(res, 200, 'Student deleted successfully', result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+

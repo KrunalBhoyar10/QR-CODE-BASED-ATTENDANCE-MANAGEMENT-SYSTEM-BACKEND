@@ -193,6 +193,12 @@ class HodRepository {
     });
   }
 
+  async deleteSection(sectionId) {
+    return prisma.section.delete({
+      where: { id: sectionId },
+    });
+  }
+
   // ============================================================
   // SUBJECTS
   // ============================================================

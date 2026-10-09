@@ -56,6 +56,13 @@ router.use(authenticateJwt);
 router.use(authorizeRoles('HOD'));
 
 // ============================================================
+// 0. DEPARTMENT HIERARCHY
+// ============================================================
+router.get('/my-department', hodController.getMyDepartment);
+router.get('/departments', hodController.listDepartments);
+router.get('/departments/:departmentId/programs', hodController.getDepartmentPrograms);
+
+// ============================================================
 // 1. HOD PROFILE & PASSWORD
 // ============================================================
 router.get('/profile', hodController.getProfile);
@@ -95,6 +102,7 @@ router.get(
 router.post('/sections', validate(createSectionSchema), hodController.createSection);
 router.get('/sections/:id', validate(sectionIdParamSchema), hodController.getSectionById);
 router.patch('/sections/:id', validate(updateSectionSchema), hodController.updateSection);
+router.delete('/sections/:id', validate(sectionIdParamSchema), hodController.deleteSection);
 
 // ============================================================
 // 5. SUBJECT MANAGEMENT

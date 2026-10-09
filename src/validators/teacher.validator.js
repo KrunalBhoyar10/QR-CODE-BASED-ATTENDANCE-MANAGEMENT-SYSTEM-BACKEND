@@ -89,10 +89,12 @@ export const academicYearIdForSectionsParamSchema = z.object({
 export const createSessionSchema = z.object({
   body: z.object({
     teachingAssignmentId: z.string().uuid('Invalid teaching assignment ID format'),
-    duration: z.coerce.number().int().min(30, 'Duration must be at least 30 seconds').max(7200, 'Duration cannot exceed 7200 seconds (2 hours)').optional(),
-    durationSeconds: z.coerce.number().int().min(30).max(7200).optional(),
-    durationMinutes: z.coerce.number().int().min(1).max(120).optional(),
-    allowedRadius: z.coerce.number().min(5, 'Allowed radius must be at least 5 meters').max(5000, 'Allowed radius cannot exceed 5000 meters').optional().default(50),
+    duration: z.coerce.number().int().min(1).max(86400).optional(),
+    durationSeconds: z.coerce.number().int().min(1).max(86400).optional(),
+    durationMinutes: z.coerce.number().int().min(1).max(720).optional(),
+    sessionDate: z.string().optional().nullable(),
+    startTime: z.string().optional().nullable(),
+    allowedRadius: z.coerce.number().min(5, 'Allowed radius must be at least 5 meters').max(50000).optional().default(50),
     latitude: z.coerce.number().min(-90, 'Latitude must be >= -90').max(90, 'Latitude must be <= 90').optional().nullable(),
     longitude: z.coerce.number().min(-180, 'Longitude must be >= -180').max(180, 'Longitude must be <= 180').optional().nullable(),
     faceVerificationRequired: z.boolean().optional().default(false),

@@ -54,6 +54,9 @@ router.get(
 );
 router.get('/sections', teacherController.getAssignedSections);
 router.get('/subjects', teacherController.getAssignedSubjects);
+router.get('/sections/:sectionId/students', teacherController.getStudentsBySection);
+router.delete('/students/:studentId', teacherController.deleteStudent);
+router.delete('/sections/:sectionId/students/:studentId', teacherController.deleteStudent);
 
 // ============================================================
 // 3. ATTENDANCE SESSIONS & ATTENDANCE RECORDS

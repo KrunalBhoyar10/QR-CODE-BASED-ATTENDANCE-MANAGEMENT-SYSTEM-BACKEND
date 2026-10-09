@@ -367,7 +367,103 @@ class TeacherRepository {
     return assignments.map((a) => a.subject).filter(Boolean);
   }
 
-  // ============================================================
+    async findStudentsBySection(sectionId) {
+    return prisma.student.findMany({
+      where: {
+        sectionId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true,
+            avatarUrl: true,
+            isActive: true,
+          },
+        },
+        section: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        program: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
+        academicYear: {
+          select: {
+            id: true,
+            yearNumber: true,
+            label: true,
+          },
+        },
+      },
+      orderBy: { rollNumber: 'asc' },
+    });
+  }
+
+  /**
+   * Find a student by ID with user and relations
+   */
+  async findStudentById(studentId) {
+    return prisma.student.findUnique({
+      where: { id: studentId },
+      include: {
+        user: true,
+        section: true,
+        program: true,
+        academicYear: true,
+      },
+    });
+  }
+
+  /**
+   * Delete a student and their user account
+   */
+  async deleteStudent(studentId) {
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+    });
+    if (!student) return null;
+
+    return prisma.$transaction(async (tx) => {
+      // 1. Delete attendance records for this student
+      await tx.attendanceRecord.deleteMany({
+        where: { studentId },
+      });
+
+      // 2. Delete student enrollments
+      await tx.studentEnrollment.deleteMany({
+        where: { studentId },
+      });
+
+      // 3. Delete student record
+      const deletedStudent = await tx.student.delete({
+        where: { id: studentId },
+      });
+
+      // 4. Delete user record if exists
+      if (student.userId) {
+        await tx.refreshToken.deleteMany({
+          where: { userId: student.userId },
+        });
+        await tx.user.delete({
+          where: { id: student.userId },
+        });
+      }
+
+      return deletedStudent;
+    });
+  }
+
+// ============================================================
   // ATTENDANCE SESSIONS
   // ============================================================
 
@@ -640,20 +736,20 @@ class TeacherRepository {
    * Aggregate actual database attendance stats for a session
    */
   async getSessionAttendanceSummary(sessionId, sectionId) {
-    // 1. Count total students in section
-    const totalStudents = await prisma.student.count({
-      where: {
-        sectionId,
-        user: { isActive: true },
-      },
-    });
-
-    // 2. Count actual records by status
-    const recordsGrouped = await prisma.attendanceRecord.groupBy({
-      by: ['status'],
-      where: { sessionId },
-      _count: { _all: true },
-    });
+    // 1. Count total students in section & records by status in parallel
+    const [totalStudents, recordsGrouped] = await Promise.all([
+      prisma.student.count({
+        where: {
+          sectionId,
+          user: { isActive: true },
+        },
+      }),
+      prisma.attendanceRecord.groupBy({
+        by: ['status'],
+        where: { sessionId },
+        _count: { _all: true },
+      }),
+    ]);
 
     let presentCount = 0;
     let absentCount = 0;

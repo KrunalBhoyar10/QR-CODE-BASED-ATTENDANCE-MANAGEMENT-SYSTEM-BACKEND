@@ -1,3 +1,5 @@
+import departmentRepository from '../repositories/department.repository.js';
+import programRepository from '../repositories/program.repository.js';
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import hodRepository from '../repositories/hod.repository.js';
@@ -5,6 +7,7 @@ import userRepository from '../repositories/user.repository.js';
 import refreshTokenRepository from '../repositories/refreshToken.repository.js';
 import attendanceRepository from '../repositories/attendance.repository.js';
 import auditService from './audit.service.js';
+import { getCache, setCache } from '../lib/redis.js';
 import { hashPassword, comparePassword } from '../utils/passwords.js';
 import {
   BadRequestError,
@@ -40,12 +43,17 @@ const generateTemporaryPassword = () => {
  * Throws ForbiddenError if the user is not assigned to a department.
  */
 const resolveHodDepartment = async (userId) => {
+  const cacheKey = `hod:dept:${userId}`;
+  const cachedDeptId = await getCache(cacheKey);
+  if (cachedDeptId) return cachedDeptId;
+
   const user = await userRepository.findByIdWithProfiles(userId);
   if (!user || !user.headedDepartment?.id) {
     throw new ForbiddenError(
       'HOD is not assigned to any department. Contact the Principal to assign your department.'
     );
   }
+  await setCache(cacheKey, user.headedDepartment.id, 60);
   return user.headedDepartment.id;
 };
 
@@ -54,6 +62,48 @@ const resolveHodDepartment = async (userId) => {
 // ============================================================
 
 class HodService {
+  async getMyDepartment(hodUserId) {
+    const departmentId = await resolveHodDepartment(hodUserId);
+    const department = await prisma.department.findUnique({
+      where: { id: departmentId },
+      include: {
+        hod: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            phoneNumber: true,
+          },
+        },
+        _count: {
+          select: {
+            programs: true,
+            teachers: true,
+            students: true,
+            subjects: true,
+          },
+        },
+      },
+    });
+    if (!department) throw new NotFoundError('Department not found for this HOD');
+    return department;
+  }
+
+  async listDepartments(hodUserId) {
+    const department = await this.getMyDepartment(hodUserId);
+    return [department];
+  }
+
+  async getDepartmentPrograms(hodUserId, deptId) {
+    const userDeptId = await resolveHodDepartment(hodUserId);
+    if (deptId && deptId !== userDeptId) {
+      throw new ForbiddenError('You do not have access to another department');
+    }
+    return programRepository.findAllByDepartment(userDeptId);
+  }
+
+
   // ─────────────────────────────────────────────────────────
   // 1. HOD Profile & Password
   // ─────────────────────────────────────────────────────────
@@ -415,7 +465,33 @@ class HodService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // 5. Subjects
+    async deleteSection(hodUserId, sectionId, req) {
+    const departmentId = await resolveHodDepartment(hodUserId);
+    const section = await hodRepository.findSectionById(sectionId);
+    if (!section) throw new NotFoundError(`Section '${sectionId}' not found`);
+    if (section.academicYear?.program?.departmentId !== departmentId) {
+      throw new ForbiddenError('You do not have access to this section');
+    }
+
+    if (section._count?.students > 0) {
+      throw new BadRequestError('Cannot delete section with enrolled students. Please reassign or remove students first.');
+    }
+
+    await hodRepository.deleteSection(sectionId);
+
+    await auditService.log({
+      userId: hodUserId,
+      action: 'HOD_SECTION_DELETED',
+      entity: 'Section',
+      entityId: sectionId,
+      details: { sectionName: section.name, academicYearId: section.academicYearId },
+      req,
+    });
+
+    return { message: `Section '${section.name}' deleted successfully` };
+  }
+
+// 5. Subjects
   // ─────────────────────────────────────────────────────────
 
   async listSubjects(hodUserId, { programId, isActive } = {}) {

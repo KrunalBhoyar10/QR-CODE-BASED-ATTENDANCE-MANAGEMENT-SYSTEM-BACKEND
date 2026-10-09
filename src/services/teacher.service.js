@@ -1,4 +1,4 @@
-import teacherRepository from '../repositories/teacher.repository.js';
+﻿import teacherRepository from '../repositories/teacher.repository.js';
 import userRepository from '../repositories/user.repository.js';
 import refreshTokenRepository from '../repositories/refreshToken.repository.js';
 import auditService from './audit.service.js';
@@ -32,14 +32,18 @@ const resolveTeacher = async (userId) => {
 // ============================================================
 
 class TeacherService {
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // 1. Profile & Password
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async getProfile(userId) {
+    const cacheKey = `teacher:profile:${userId}`;
+    const cached = await getCache(cacheKey);
+    if (cached) return cached;
+
     const teacher = await resolveTeacher(userId);
 
-    return {
+    const profile = {
       id: teacher.id,
       userId: teacher.userId,
       employeeId: teacher.employeeId,
@@ -62,6 +66,9 @@ class TeacherService {
       createdAt: teacher.createdAt,
       updatedAt: teacher.updatedAt,
     };
+
+    await setCache(cacheKey, profile, 30);
+    return profile;
   }
 
   async updateProfile(userId, profileData, req) {
@@ -84,6 +91,8 @@ class TeacherService {
       ipAddress: req?.ip,
       userAgent: req?.headers?.['user-agent'],
     });
+
+    await deleteCache(`teacher:profile:${userId}`);
 
     return {
       id: updated.id,
@@ -134,11 +143,18 @@ class TeacherService {
     return { message: 'Password changed successfully' };
   }
 
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // 2. Teaching Assignments (Grouped & Structured)
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async getAssignments(userId, filters = {}) {
+    const isDefault = !filters || Object.keys(filters).length === 0;
+    const cacheKey = `teacher:assignments:${userId}`;
+    if (isDefault) {
+      const cached = await getCache(cacheKey);
+      if (cached) return cached;
+    }
+
     const teacher = await resolveTeacher(userId);
     const assignments = await teacherRepository.findAssignmentsByTeacher(teacher.id, filters);
 
@@ -212,7 +228,7 @@ class TeacherService {
       })),
     }));
 
-    return {
+    const result = {
       teacher: {
         id: teacher.id,
         employeeId: teacher.employeeId,
@@ -234,6 +250,11 @@ class TeacherService {
       })),
       totalCount: assignments.length,
     };
+
+    if (isDefault) {
+      await setCache(cacheKey, result, 60);
+    }
+    return result;
   }
 
   async getAssignmentById(userId, assignmentId) {
@@ -272,9 +293,56 @@ class TeacherService {
     return teacherRepository.findSubjectsByTeacher(teacher.id, filters);
   }
 
-  // ─────────────────────────────────────────────────────────
+  async getStudentsBySection(userId, sectionId) {
+    const teacher = await resolveTeacher(userId);
+    if (!sectionId) {
+      throw new BadRequestError('Section ID is required');
+    }
+    const students = await teacherRepository.findStudentsBySection(sectionId);
+    return students;
+  }
+
+  async deleteStudent(userId, studentId, req) {
+    const teacher = await resolveTeacher(userId);
+
+    const student = await teacherRepository.findStudentById(studentId);
+    if (!student) {
+      throw new NotFoundError('Student not found');
+    }
+
+    // Verify teacher is assigned to the student's section or department
+    const assignments = await teacherRepository.findAssignmentsByTeacher(teacher.id);
+    const hasSectionAccess = assignments.some(
+      (a) => a.sectionId === student.sectionId || a.departmentId === student.departmentId
+    );
+
+    if (!hasSectionAccess) {
+      throw new ForbiddenError('Access denied: You are not authorized to delete students outside your assigned sections');
+    }
+
+    await teacherRepository.deleteStudent(studentId);
+
+    await auditService.log({
+      userId,
+      action: 'STUDENT_DELETED_BY_TEACHER',
+      entity: 'Student',
+      entityId: studentId,
+      details: {
+        rollNumber: student.rollNumber,
+        enrollmentNumber: student.enrollmentNumber,
+        sectionId: student.sectionId,
+        studentName: `${student.user?.firstName || ''} ${student.user?.lastName || ''}`.trim(),
+      },
+      ipAddress: req?.ip,
+      userAgent: req?.headers?.['user-agent'],
+    });
+
+    return { message: 'Student deleted successfully', studentId };
+  }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // 3. Attendance Session Lifecycle (DB + Redis + QR)
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async createSession(userId, sessionData, req) {
     const teacher = await resolveTeacher(userId);
@@ -342,8 +410,10 @@ class TeacherService {
       durationSeconds = duration;
     }
 
-    const startTime = new Date();
-    const expiryTime = new Date(startTime.getTime() + durationSeconds * 1000);
+    const sessionDateVal = sessionData.sessionDate ? new Date(sessionData.sessionDate) : new Date();
+    const startTimeVal = sessionData.startTime ? new Date(sessionData.startTime) : new Date();
+    const nowTime = new Date();
+    const expiryTime = new Date(nowTime.getTime() + durationSeconds * 1000);
 
     // 5. Cryptographically secure random tokens (short-lived & secret-free)
     const sessionSecret = generateRandomToken(32);
@@ -359,8 +429,8 @@ class TeacherService {
       programId,
       academicYearId,
       sectionId,
-      sessionDate: startTime,
-      startTime,
+      sessionDate: sessionDateVal,
+      startTime: startTimeVal,
       endTime: expiryTime,
       status: 'ACTIVE',
       sessionType,
@@ -384,7 +454,7 @@ class TeacherService {
       programId,
       academicYearId,
       sectionId,
-      startTime: startTime.toISOString(),
+      startTime: startTimeVal.toISOString(),
       expiryTime: expiryTime.toISOString(),
       durationSeconds,
       status: 'ACTIVE',
@@ -475,22 +545,35 @@ class TeacherService {
     const dbSessions = await teacherRepository.findActiveSessionsByTeacher(teacher.id);
 
     const now = new Date();
-    const activeSessions = [];
+    const expiredSessions = [];
+    const validSessions = [];
 
     for (const s of dbSessions) {
-      const isExpired = new Date(s.endTime) <= now;
-      if (isExpired) {
-        // Auto-complete expired sessions in DB and clean up Redis
-        await teacherRepository.updateSessionStatus(s.id, 'COMPLETED');
-        await deleteCache(`attendance:session:${s.id}`);
-        continue;
+      if (new Date(s.endTime) <= now) {
+        expiredSessions.push(s);
+      } else {
+        validSessions.push(s);
       }
+    }
 
-      // Check Redis active state
-      const redisState = await getCache(`attendance:session:${s.id}`);
+    if (expiredSessions.length > 0) {
+      await Promise.all(
+        expiredSessions.map(async (s) => {
+          await teacherRepository.updateSessionStatus(s.id, 'COMPLETED');
+          await deleteCache(`attendance:session:${s.id}`);
+        })
+      );
+    }
+
+    const redisStates = await Promise.all(
+      validSessions.map((s) => getCache(`attendance:session:${s.id}`))
+    );
+
+    const activeSessions = validSessions.map((s, idx) => {
+      const redisState = redisStates[idx];
       const remainingSeconds = Math.max(0, Math.floor((new Date(s.endTime).getTime() - now.getTime()) / 1000));
 
-      activeSessions.push({
+      return {
         id: s.id,
         teachingAssignmentId: s.teachingAssignmentId,
         subject: s.subject,
@@ -507,8 +590,8 @@ class TeacherService {
         faceVerificationRequired: s.faceVerificationRequired,
         totalAttendanceMarked: s._count?.attendanceRecords || 0,
         hasActiveCache: !!redisState,
-      });
-    }
+      };
+    });
 
     return activeSessions;
   }
@@ -557,8 +640,10 @@ class TeacherService {
   }
 
   async getSessionById(userId, sessionId) {
-    const teacher = await resolveTeacher(userId);
-    const session = await teacherRepository.findSessionById(sessionId);
+    const [teacher, session] = await Promise.all([
+      resolveTeacher(userId),
+      teacherRepository.findSessionById(sessionId),
+    ]);
 
     if (!session) {
       throw new NotFoundError('Attendance session not found');
@@ -568,8 +653,10 @@ class TeacherService {
       throw new ForbiddenError('Access denied: You do not have permission to view this session');
     }
 
-    const redisState = await getCache(`attendance:session:${sessionId}`);
-    const summary = await teacherRepository.getSessionAttendanceSummary(session.id, session.sectionId);
+    const [redisState, summary] = await Promise.all([
+      getCache(`attendance:session:${sessionId}`),
+      teacherRepository.getSessionAttendanceSummary(session.id, session.sectionId),
+    ]);
 
     return {
       session: {
@@ -601,8 +688,10 @@ class TeacherService {
   }
 
   async closeSession(userId, sessionId, req) {
-    const teacher = await resolveTeacher(userId);
-    const session = await teacherRepository.findSessionById(sessionId);
+    const [teacher, session] = await Promise.all([
+      resolveTeacher(userId),
+      teacherRepository.findSessionById(sessionId),
+    ]);
 
     if (!session) {
       throw new NotFoundError('Attendance session not found');
@@ -647,8 +736,10 @@ class TeacherService {
   }
 
   async getSessionAttendance(userId, sessionId, query = {}) {
-    const teacher = await resolveTeacher(userId);
-    const session = await teacherRepository.findSessionById(sessionId);
+    const [teacher, session] = await Promise.all([
+      resolveTeacher(userId),
+      teacherRepository.findSessionById(sessionId),
+    ]);
 
     if (!session) {
       throw new NotFoundError('Attendance session not found');
@@ -708,3 +799,4 @@ class TeacherService {
 }
 
 export default new TeacherService();
+
