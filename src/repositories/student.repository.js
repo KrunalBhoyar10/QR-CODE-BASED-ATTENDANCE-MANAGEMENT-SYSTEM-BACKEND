@@ -310,7 +310,7 @@ class StudentRepository {
     const totalSessions = await prisma.attendanceSession.count({
       where: {
         sectionId,
-        status: { in: ['ACTIVE', 'COMPLETED'] },
+        status: { in: ['ACTIVE', 'ENDED', 'COMPLETED'] },
       },
     });
 
@@ -389,7 +389,7 @@ class StudentRepository {
           ELSE 0.00
         END AS "attendancePercentage"
       FROM subjects sub
-      LEFT JOIN attendance_sessions s ON s."subjectId" = sub.id AND s."sectionId" = ${sectionId} AND s.status IN ('ACTIVE', 'COMPLETED')
+      LEFT JOIN attendance_sessions s ON s."subjectId" = sub.id AND s."sectionId" = ${sectionId} AND s.status IN ('ACTIVE', 'ENDED', 'COMPLETED')
       LEFT JOIN attendance_records ar ON ar."sessionId" = s.id AND ar."studentId" = ${studentId}
       WHERE sub."programId" = ${programId} AND sub."isActive" = true
       GROUP BY sub.id, sub.name, sub.code, sub.credits

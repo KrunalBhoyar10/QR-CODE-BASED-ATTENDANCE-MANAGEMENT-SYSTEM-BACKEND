@@ -1,3 +1,25 @@
+
+const parseDateRange = (startDate, endDate) => {
+  if (!startDate && !endDate) return null;
+  let start = null;
+  let end = null;
+  if (startDate) {
+    const sStr = String(startDate).split('T')[0];
+    start = new Date(`${sStr}T00:00:00.000Z`);
+  }
+  if (endDate) {
+    const eStr = String(endDate).split('T')[0];
+    end = new Date(`${eStr}T23:59:59.999Z`);
+  } else if (startDate) {
+    const sStr = String(startDate).split('T')[0];
+    end = new Date(`${sStr}T23:59:59.999Z`);
+  }
+  const cond = {};
+  if (start && !isNaN(start.getTime())) cond.gte = start;
+  if (end && !isNaN(end.getTime())) cond.lte = end;
+  return Object.keys(cond).length > 0 ? cond : null;
+};
+
 import departmentRepository from '../repositories/department.repository.js';
 import programRepository from '../repositories/program.repository.js';
 import crypto from 'crypto';
@@ -64,30 +86,40 @@ const resolveHodDepartment = async (userId) => {
 class HodService {
   async getMyDepartment(hodUserId) {
     const departmentId = await resolveHodDepartment(hodUserId);
-    const department = await prisma.department.findUnique({
-      where: { id: departmentId },
-      include: {
-        hod: {
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
-            phoneNumber: true,
+    const [department, sectionsCount] = await Promise.all([
+      prisma.department.findUnique({
+        where: { id: departmentId },
+        include: {
+          hod: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              phoneNumber: true,
+            },
+          },
+          _count: {
+            select: {
+              programs: true,
+              teachers: true,
+              students: true,
+              subjects: true,
+            },
           },
         },
-        _count: {
-          select: {
-            programs: true,
-            teachers: true,
-            students: true,
-            subjects: true,
+      }),
+      // Sections are nested under academicYear → program, so count them explicitly.
+      prisma.section.count({
+        where: {
+          academicYear: {
+            program: { departmentId },
           },
         },
-      },
-    });
+      }),
+    ]);
     if (!department) throw new NotFoundError('Department not found for this HOD');
-    return department;
+    return { ...department, sectionsCount };
   }
 
   async listDepartments(hodUserId) {
@@ -237,6 +269,43 @@ class HodService {
     return program;
   }
 
+  
+  async deleteProgram(hodUserId, programId, req) {
+    const departmentId = await resolveHodDepartment(hodUserId);
+    const program = await programRepository.findById(programId);
+    if (!program) throw new NotFoundError(`Program '${programId}' not found`);
+    if (program.departmentId !== departmentId) {
+      throw new ForbiddenError('You do not have access to this program');
+    }
+
+    const studentsCount = await prisma.student.count({ where: { programId } });
+    if (studentsCount > 0) {
+      throw new BadRequestError('Cannot delete program with enrolled students. Please remove or reassign students first.');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.subject.deleteMany({ where: { programId } });
+      const years = await tx.academicYear.findMany({ where: { programId }, select: { id: true } });
+      const yearIds = years.map(y => y.id);
+      if (yearIds.length > 0) {
+        await tx.section.deleteMany({ where: { academicYearId: { in: yearIds } } });
+        await tx.academicYear.deleteMany({ where: { programId } });
+      }
+      await tx.program.delete({ where: { id: programId } });
+    });
+
+    await auditService.log({
+      userId: hodUserId,
+      action: 'HOD_PROGRAM_DELETED',
+      entity: 'Program',
+      entityId: programId,
+      details: { programName: program.name, programCode: program.code },
+      req,
+    });
+
+    return { message: `Program '${program.name}' deleted successfully` };
+  }
+
   async updateProgram(hodUserId, programId, data, req) {
     const departmentId = await resolveHodDepartment(hodUserId);
     const program = await hodRepository.findProgramById(programId);
@@ -345,9 +414,12 @@ class HodService {
       throw new ForbiddenError('You do not have access to this academic year');
     }
 
-    const updated = await hodRepository.updateAcademicYear(academicYearId, {
-      ...(data.label !== undefined && { label: data.label.trim() }),
-    });
+    const updatePayload = {};
+    if (data.yearNumber !== undefined) updatePayload.yearNumber = data.yearNumber;
+    if (data.semesterCount !== undefined) updatePayload.semesterCount = data.semesterCount;
+    if (data.label !== undefined) updatePayload.label = data.label.trim();
+
+    const updated = await hodRepository.updateAcademicYear(academicYearId, updatePayload);
 
     await auditService.log({
       userId: hodUserId,
@@ -360,6 +432,39 @@ class HodService {
 
     return updated;
   }
+
+  async deleteAcademicYear(hodUserId, academicYearId, req) {
+    const departmentId = await resolveHodDepartment(hodUserId);
+    const academicYear = await hodRepository.findAcademicYearById(academicYearId);
+    if (!academicYear) throw new NotFoundError(`Academic year '${academicYearId}' not found`);
+    if (academicYear.program?.departmentId !== departmentId) {
+      throw new ForbiddenError('You do not have access to this academic year');
+    }
+
+    if (academicYear._count?.students > 0) {
+      throw new BadRequestError('Cannot delete academic year with enrolled students.');
+    }
+    if (academicYear.sections && academicYear.sections.length > 0) {
+      throw new BadRequestError('Cannot delete academic year with existing sections. Please delete sections first.');
+    }
+    if (academicYear._count?.teachingAssignments > 0) {
+      throw new BadRequestError('Cannot delete academic year with active teaching assignments.');
+    }
+
+    await hodRepository.deleteAcademicYear(academicYearId);
+
+    await auditService.log({
+      userId: hodUserId,
+      action: 'HOD_ACADEMIC_YEAR_DELETED',
+      entity: 'AcademicYear',
+      entityId: academicYearId,
+      details: { yearNumber: academicYear.yearNumber, programId: academicYear.programId },
+      req,
+    });
+
+    return { message: `Academic Year ${academicYear.yearNumber} deleted successfully` };
+  }
+
 
   // ─────────────────────────────────────────────────────────
   // 4. Sections
@@ -494,7 +599,7 @@ class HodService {
 // 5. Subjects
   // ─────────────────────────────────────────────────────────
 
-  async listSubjects(hodUserId, { programId, isActive } = {}) {
+  async listSubjects(hodUserId, { programId, academicYearId, isActive } = {}) {
     const departmentId = await resolveHodDepartment(hodUserId);
 
     // If programId provided, verify it belongs to HOD's department
@@ -506,7 +611,19 @@ class HodService {
       }
     }
 
-    return hodRepository.findSubjectsByDepartment(departmentId, { programId, isActive });
+    // If academicYearId provided, verify it belongs to the program (if specified)
+    if (academicYearId) {
+      const academicYear = await hodRepository.findAcademicYearById(academicYearId);
+      if (!academicYear) throw new NotFoundError(`Academic year '${academicYearId}' not found`);
+      if (programId && academicYear.programId !== programId) {
+        throw new ForbiddenError('This academic year does not belong to the selected program');
+      }
+      if (academicYear.program?.departmentId !== departmentId) {
+        throw new ForbiddenError('This academic year does not belong to your department');
+      }
+    }
+
+    return hodRepository.findSubjectsByDepartment(departmentId, { programId, academicYearId, isActive });
   }
 
   async getSubjectById(hodUserId, subjectId) {
@@ -529,6 +646,16 @@ class HodService {
       throw new ForbiddenError('This program does not belong to your department');
     }
 
+    // If academicYearId provided, verify it belongs to the program
+    let academicYearId = data.academicYearId || null;
+    if (academicYearId) {
+      const academicYear = await hodRepository.findAcademicYearById(academicYearId);
+      if (!academicYear) throw new NotFoundError(`Academic year '${academicYearId}' not found`);
+      if (academicYear.programId !== data.programId) {
+        throw new ForbiddenError('This academic year does not belong to the selected program');
+      }
+    }
+
     // Subject code must be globally unique (schema constraint)
     const existingCode = await hodRepository.findSubjectByCode(data.code);
     if (existingCode) {
@@ -540,8 +667,10 @@ class HodService {
       code: data.code.trim(),
       credits: data.credits || null,
       isActive: data.isActive !== undefined ? data.isActive : true,
+      subjectType: data.subjectType || 'COMMON',
       departmentId,
       programId: data.programId,
+      academicYearId,
     });
 
     await auditService.log({
@@ -549,7 +678,7 @@ class HodService {
       action: 'HOD_SUBJECT_CREATED',
       entity: 'Subject',
       entityId: subject.id,
-      details: { subjectName: subject.name, departmentId, programId: data.programId },
+      details: { subjectName: subject.name, departmentId, programId: data.programId, academicYearId },
       req,
     });
 
@@ -572,11 +701,29 @@ class HodService {
       }
     }
 
+    // Determine the effective program for academic year validation
+    const effectiveProgramId = data.programId || subject.programId;
+
+    // If academicYearId provided, validate it belongs to the effective program
+    let academicYearUpdate = {};
+    if (data.academicYearId !== undefined) {
+      if (data.academicYearId) {
+        const academicYear = await hodRepository.findAcademicYearById(data.academicYearId);
+        if (!academicYear) throw new NotFoundError(`Academic year '${data.academicYearId}' not found`);
+        if (academicYear.programId !== effectiveProgramId) {
+          throw new ForbiddenError('This academic year does not belong to the selected program');
+        }
+      }
+      academicYearUpdate = { academicYearId: data.academicYearId || null };
+    }
+
     const updated = await hodRepository.updateSubject(subjectId, {
       ...(data.name !== undefined && { name: data.name.trim() }),
       ...(data.code !== undefined && { code: data.code.trim() }),
       ...(data.credits !== undefined && { credits: data.credits }),
       ...(data.isActive !== undefined && { isActive: data.isActive }),
+      ...(data.subjectType !== undefined && { subjectType: data.subjectType }),
+      ...academicYearUpdate,
     });
 
     await auditService.log({
@@ -589,6 +736,28 @@ class HodService {
     });
 
     return updated;
+  }
+
+  async deleteSubject(hodUserId, subjectId, req) {
+    const departmentId = await resolveHodDepartment(hodUserId);
+    const subject = await hodRepository.findSubjectById(subjectId);
+    if (!subject) throw new NotFoundError(`Subject '${subjectId}' not found`);
+    if (subject.departmentId !== departmentId) {
+      throw new ForbiddenError('You do not have access to this subject');
+    }
+
+    await hodRepository.deleteSubject(subjectId);
+
+    await auditService.log({
+      userId: hodUserId,
+      action: 'HOD_SUBJECT_DELETED',
+      entity: 'Subject',
+      entityId: subjectId,
+      details: { subjectName: subject.name, subjectCode: subject.code },
+      req,
+    });
+
+    return { message: `Subject '${subject.name}' deleted successfully` };
   }
 
   // ─────────────────────────────────────────────────────────
@@ -1144,6 +1313,112 @@ class HodService {
       criticalLowAttendanceStudents: lowAttendance.students,
       generatedAt: new Date().toISOString(),
     };
+  }
+
+  async getSectionStudentsSubjectAttendance(hodUserId, sectionId, subjectId, filters = {}) {
+    const departmentId = await resolveHodDepartment(hodUserId);
+    if (!sectionId) throw new BadRequestError('Section ID is required');
+    if (!subjectId) throw new BadRequestError('Subject ID is required');
+
+    const students = await prisma.student.findMany({
+      where: {
+        sectionId,
+        departmentId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true,
+            avatarUrl: true,
+          },
+        },
+      },
+      orderBy: { rollNumber: 'asc' },
+    });
+
+    if (!students.length) return [];
+
+    let dateFilter = null;
+    const targetDate = filters.date || (filters.startDate && filters.startDate === filters.endDate ? filters.startDate : null);
+
+    if (targetDate) {
+      const d = targetDate.includes('T') ? targetDate.split('T')[0] : targetDate;
+      dateFilter = {
+        gte: new Date(d + 'T00:00:00.000Z'),
+        lte: new Date(d + 'T23:59:59.999Z'),
+      };
+    } else if (filters.startDate || filters.endDate) {
+      const range = {};
+      if (filters.startDate) {
+        const s = filters.startDate.includes('T') ? filters.startDate.split('T')[0] : filters.startDate;
+        range.gte = new Date(s + 'T00:00:00.000Z');
+      }
+      if (filters.endDate) {
+        const e = filters.endDate.includes('T') ? filters.endDate.split('T')[0] : filters.endDate;
+        range.lte = new Date(e + 'T23:59:59.999Z');
+      }
+      dateFilter = range;
+    }
+
+    const sessionWhere = {
+      sectionId,
+      subjectId,
+      status: { in: ['ACTIVE', 'ENDED', 'COMPLETED'] },
+      ...(dateFilter ? { sessionDate: dateFilter } : {}),
+    };
+
+    const sessions = await prisma.attendanceSession.findMany({
+      where: sessionWhere,
+      select: { id: true, sessionDate: true, startTime: true, endTime: true },
+      orderBy: { sessionDate: 'asc' },
+    });
+
+    const totalSessions = sessions.length;
+    const sessionIds = sessions.map(s => s.id);
+
+    let records = [];
+    if (sessionIds.length > 0) {
+      records = await prisma.attendanceRecord.findMany({
+        where: {
+          sessionId: { in: sessionIds },
+          studentId: { in: students.map(s => s.id) },
+        },
+        select: {
+          studentId: true,
+          sessionId: true,
+          status: true,
+        },
+      });
+    }
+
+    return students.map(s => {
+      const studentRecords = records.filter(r => r.studentId === s.id);
+      const presentCount = studentRecords.filter(r => r.status === 'PRESENT' || r.status === 'LATE').length;
+      const absentCount = totalSessions >= presentCount ? totalSessions - presentCount : 0;
+      const pct = totalSessions > 0 ? Number(((presentCount / totalSessions) * 100).toFixed(1)) : 0;
+
+      return {
+        id: s.id,
+        studentId: s.id,
+        studentName: `${s.user?.firstName || ''} ${s.user?.lastName || ''}`.trim() || 'Student',
+        email: s.user?.email || '',
+        rollNumber: s.rollNumber || '',
+        enrollmentNumber: s.enrollmentNumber || '',
+        totalClasses: totalSessions,
+        totalSessions,
+        presentCount,
+        totalPresent: presentCount,
+        absentCount,
+        totalAbsent: absentCount,
+        attendancePercentage: pct,
+        percentage: pct,
+        dailyStatus: totalSessions > 0 ? (presentCount > 0 ? 'PRESENT' : 'ABSENT') : 'NO_CLASS',
+      };
+    });
   }
 }
 

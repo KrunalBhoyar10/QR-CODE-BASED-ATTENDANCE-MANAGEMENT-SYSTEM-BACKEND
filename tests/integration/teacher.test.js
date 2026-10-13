@@ -717,7 +717,7 @@ describe('Teacher Backend Module Integration Tests', () => {
       expect(res.body.pagination.totalCount).toBe(1);
     });
 
-    it('POST /api/v1/teacher/sessions/:id/close manually closes active session and deletes Redis key', async () => {
+    it('POST /api/v1/teacher/sessions/:id/close ends the session and deletes its Redis key', async () => {
       teacherRepository.findSessionById.mockResolvedValue({
         id: SESSION_ID,
         teacherId: TEACHER_A_ID,
@@ -727,7 +727,7 @@ describe('Teacher Backend Module Integration Tests', () => {
       });
       teacherRepository.updateSessionStatus.mockResolvedValue({
         id: SESSION_ID,
-        status: 'COMPLETED',
+        status: 'ENDED',
       });
 
       const res = await request(app)
@@ -736,13 +736,21 @@ describe('Teacher Backend Module Integration Tests', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.message).toContain('closed successfully');
+      expect(res.body.data.status).toBe('ENDED');
       expect(teacherRepository.updateSessionStatus).toHaveBeenCalledWith(
         SESSION_ID,
-        'COMPLETED',
+        'ENDED',
         expect.any(Object)
       );
       expect(mockDeleteCache).toHaveBeenCalledWith(`attendance:session:${SESSION_ID}`);
+
+      teacherRepository.findActiveSessionsByTeacher.mockResolvedValue([]);
+      const refreshed = await request(app)
+        .get('/api/v1/teacher/sessions/active')
+        .set('Authorization', `Bearer ${teacherAToken}`);
+
+      expect(refreshed.status).toBe(200);
+      expect(refreshed.body.data).toHaveLength(0);
     });
   });
 

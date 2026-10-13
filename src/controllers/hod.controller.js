@@ -97,6 +97,16 @@ export const createProgram = async (req, res, next) => {
   }
 };
 
+
+export const deleteProgram = async (req, res, next) => {
+  try {
+    const result = await hodService.deleteProgram(req.user.id, req.params.id, req);
+    return successResponse(res, 200, result.message);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const updateProgram = async (req, res, next) => {
   try {
     const updated = await hodService.updateProgram(req.user.id, req.params.id, req.body, req);
@@ -142,6 +152,15 @@ export const updateAcademicYear = async (req, res, next) => {
   try {
     const updated = await hodService.updateAcademicYear(req.user.id, req.params.id, req.body, req);
     return successResponse(res, 200, 'Academic year updated successfully', updated);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteAcademicYear = async (req, res, next) => {
+  try {
+    const result = await hodService.deleteAcademicYear(req.user.id, req.params.id, req);
+    return successResponse(res, 200, result.message);
   } catch (error) {
     next(error);
   }
@@ -203,8 +222,8 @@ export const deleteSection = async (req, res, next) => {
 
 export const listSubjects = async (req, res, next) => {
   try {
-    const { programId, isActive } = req.query;
-    const subjects = await hodService.listSubjects(req.user.id, { programId, isActive });
+    const { programId, academicYearId, isActive } = req.query;
+    const subjects = await hodService.listSubjects(req.user.id, { programId, academicYearId, isActive });
     return successResponse(res, 200, 'Subjects retrieved successfully', subjects);
   } catch (error) {
     next(error);
@@ -233,6 +252,15 @@ export const updateSubject = async (req, res, next) => {
   try {
     const updated = await hodService.updateSubject(req.user.id, req.params.id, req.body, req);
     return successResponse(res, 200, 'Subject updated successfully', updated);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteSubject = async (req, res, next) => {
+  try {
+    const result = await hodService.deleteSubject(req.user.id, req.params.id, req);
+    return successResponse(res, 200, result.message);
   } catch (error) {
     next(error);
   }
@@ -463,6 +491,17 @@ export const getReportsSummary = async (req, res, next) => {
   try {
     const report = await hodService.getReportsSummary(req.user.id, req.query);
     return successResponse(res, 200, 'HOD department report generated successfully', report);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getSectionStudentsSubjectAttendance = async (req, res, next) => {
+  try {
+    const { sectionId, subjectId } = req.params;
+    const { date, startDate, endDate } = req.query;
+    const result = await hodService.getSectionStudentsSubjectAttendance(req.user.id, sectionId, subjectId, { date, startDate, endDate });
+    return successResponse(res, 200, 'Section students subject attendance retrieved successfully', result);
   } catch (error) {
     next(error);
   }

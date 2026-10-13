@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+﻿import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import studentRepository from '../repositories/student.repository.js';
 import userRepository from '../repositories/user.repository.js';
@@ -38,9 +38,9 @@ const resolveStudent = async (userId) => {
 // ============================================================
 
 class StudentService {
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // 1. Profile & Institutional Identity
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async getProfile(userId) {
     const student = await resolveStudent(userId);
@@ -138,9 +138,9 @@ class StudentService {
     };
   }
 
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // 2. Password Management (Change & Reset)
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async changePassword({ userId, currentPassword, newPassword, req }) {
     const user = await userRepository.findById(userId);
@@ -218,7 +218,7 @@ class StudentService {
     if (process.env.NODE_ENV !== 'production') {
       return {
         message: 'Password reset token generated successfully.',
-        resetToken,  // Dev only — must be emailed in production
+        resetToken,  // Dev only â€” must be emailed in production
         expiresAt: expiresAt.toISOString(),
       };
     }
@@ -270,9 +270,9 @@ class StudentService {
     return { message: 'Password has been reset successfully. Please log in with your new password.' };
   }
 
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // 3. Enrollment Info
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async getEnrollments(userId) {
     const student = await resolveStudent(userId);
@@ -288,9 +288,9 @@ class StudentService {
     };
   }
 
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // 4. Attendance Marking via QR Scan (Core Attendance Flow)
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async markAttendance(userId, attendanceData, req) {
     // 1. Authenticate & Resolve Student Identity
@@ -410,7 +410,7 @@ class StudentService {
     }
 
     // 7. Server-Side Geolocation & Geofencing Verification
-    // The backend calculates actual distance — never trusting client flags
+    // The backend calculates actual distance â€” never trusting client flags
     if (session.latitude !== null && session.longitude !== null) {
       if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
         throw new BadRequestError('Location coordinates (latitude and longitude) are required for this session');
@@ -465,6 +465,18 @@ class StudentService {
     let record;
     try {
       record = await prisma.$transaction(async (tx) => {
+        const [lockedSession] = await tx.$queryRaw`
+          SELECT "status"
+          FROM "attendance_sessions"
+          WHERE "id" = ${session.id}
+          FOR UPDATE
+        `;
+
+        if (!lockedSession || lockedSession.status !== 'ACTIVE') {
+          const status = lockedSession?.status?.toLowerCase() || 'unavailable';
+          throw new BadRequestError(`Cannot mark attendance: Session is ${status}`);
+        }
+
         // Double-check existence inside transaction to avoid race conditions
         const inTxRecord = await tx.attendanceRecord.findUnique({
           where: {
@@ -557,9 +569,9 @@ class StudentService {
     };
   }
 
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // 5. Attendance Summary & Reports
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async getAttendanceSummary(userId) {
     const student = await resolveStudent(userId);
@@ -619,6 +631,20 @@ class StudentService {
       },
     };
   }
-}
+  async checkSessionStatus(userId, sessionId) {
+    const student = await resolveStudent(userId);
+    const session = await studentRepository.findSessionById(sessionId);
+    if (!session) {
+      return { sessionActive: false, alreadyMarked: false, reason: 'Session not found.' };
+    }
+    const sessionActive = session.status === 'ACTIVE';
+    const existingRecord = await studentRepository.findAttendanceRecord(student.id, sessionId);
+    return {
+      sessionActive,
+      alreadyMarked: Boolean(existingRecord),
+      sessionStatus: session.status,
+    };
+  }
 
+}
 export default new StudentService();

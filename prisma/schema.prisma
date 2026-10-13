@@ -37,6 +37,7 @@ enum EnrollmentStatus {
 enum SessionStatus {
   SCHEDULED
   ACTIVE
+  ENDED
   COMPLETED
   CANCELLED
 }
@@ -195,6 +196,7 @@ model AcademicYear {
   teachingAssignments TeachingAssignment[]
   enrollments         StudentEnrollment[]
   attendanceSessions  AttendanceSession[]
+  subjects            Subject[]
 
   @@unique([programId, yearNumber])
   @@index([programId])
@@ -264,9 +266,18 @@ model Student {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
+  // ── Face Verification ──────────────────────────────────────────────
+  facePhotoUrl     String?      // relative path or URL to stored face image
+  faceDescriptor   Float[]      // 128-d face-api.js descriptor array
+  faceChangeCount  Int          @default(0)
+  faceChangeLimit  Int          @default(2)
+  teacherFaceAuth  Boolean      @default(false) // teacher granted 1 extra change
+
   // Relations
   enrollments       StudentEnrollment[]
   attendanceRecords AttendanceRecord[]
+  faceChangeLogs    FaceChangeLog[]
+  faceAuthLogs      FaceAuthLog[]
 
   @@index([departmentId])
   @@index([programId])
@@ -276,23 +287,27 @@ model Student {
 }
 
 model Subject {
-  id           String     @id @default(uuid())
-  name         String     // e.g. "Core Java", "Data Communication & Networking"
-  code         String     @unique // e.g. "CS-301"
-  credits      Int?
-  isActive     Boolean    @default(true)
-  departmentId String
-  department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  programId    String
-  program      Program    @relation(fields: [programId], references: [id], onDelete: Restrict)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id             String       @id @default(uuid())
+  name           String       // e.g. "Core Java", "Data Communication & Networking"
+  code           String       // e.g. "CS-301" (uniqueness enforced only for active subjects via partial index)
+  credits        Int?
+  isActive       Boolean      @default(true)
+  subjectType    String       @default("COMMON") // "COMMON" or "ELECTIVE"
+  departmentId   String
+  department     Department   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  programId      String
+  program        Program      @relation(fields: [programId], references: [id], onDelete: Restrict)
+  academicYearId String?
+  academicYear   AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   teachingAssignments TeachingAssignment[]
   attendanceSessions  AttendanceSession[]
 
   @@index([departmentId])
   @@index([programId])
+  @@index([academicYearId])
   @@index([departmentId, isActive])
   @@map("subjects")
 }
@@ -453,4 +468,34 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ==========================================
+// FACE VERIFICATION AUDIT MODELS
+// ==========================================
+
+model FaceChangeLog {
+  id          String   @id @default(uuid())
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  changedAt   DateTime @default(now())
+  changedBy   String   // "SELF" or teacherId
+  ipAddress   String?
+  userAgent   String?
+
+  @@index([studentId])
+  @@map("face_change_logs")
+}
+
+model FaceAuthLog {
+  id           String    @id @default(uuid())
+  studentId    String
+  student      Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  authorizedBy String    // teacherId who granted the permission
+  authorizedAt DateTime  @default(now())
+  consumedAt   DateTime? // null = not yet used; set when student uses the change
+  revoked      Boolean   @default(false)
+
+  @@index([studentId])
+  @@map("face_auth_logs")
 }

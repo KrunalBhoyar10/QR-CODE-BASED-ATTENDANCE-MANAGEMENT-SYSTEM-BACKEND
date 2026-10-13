@@ -117,3 +117,12 @@ export const getAttendanceHistory = async (req, res, next) => {
     next(error);
   }
 };
+
+export const checkSessionStatus = async (req, res, next) => {
+  try {
+    const result = await studentService.checkSessionStatus(req.user.id, req.params.sessionId);
+    return successResponse(res, 200, 'Session status retrieved', result);
+  } catch (error) {
+    next(error);
+  }
+};

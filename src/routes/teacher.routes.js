@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as teacherController from '../controllers/teacher.controller.js';
+import * as faceController from '../controllers/face.controller.js';
 import validate from '../middleware/validate.middleware.js';
 import { authenticateJwt } from '../middleware/auth.middleware.js';
 import { authorizeRoles } from '../middleware/role.middleware.js';
@@ -55,6 +56,8 @@ router.get(
 router.get('/sections', teacherController.getAssignedSections);
 router.get('/subjects', teacherController.getAssignedSubjects);
 router.get('/sections/:sectionId/students', teacherController.getStudentsBySection);
+router.get('/sections/:sectionId/students/attendance', teacherController.getSectionStudentsAttendance);
+router.get('/sections/:sectionId/students/attendance/:subjectId', teacherController.getSectionStudentsSubjectAttendance);
 router.delete('/students/:studentId', teacherController.deleteStudent);
 router.delete('/sections/:sectionId/students/:studentId', teacherController.deleteStudent);
 
@@ -71,5 +74,15 @@ router.get(
   validate(sessionAttendanceQuerySchema),
   teacherController.getSessionAttendance
 );
+
+// ============================================================
+// 4. FACE PHOTO AUTHORIZATION
+// ============================================================
+// GET    /teacher/students/:studentId/face-status    → view student face status
+// POST   /teacher/students/:studentId/face-authorize → grant 1 extra change
+// DELETE /teacher/students/:studentId/face-authorize → revoke authorization
+router.get('/students/:studentId/face-status',    faceController.getStudentFaceStatus);
+router.post('/students/:studentId/face-authorize',   faceController.authorizeStudentFaceChange);
+router.delete('/students/:studentId/face-authorize', faceController.revokeStudentFaceAuth);
 
 export default router;

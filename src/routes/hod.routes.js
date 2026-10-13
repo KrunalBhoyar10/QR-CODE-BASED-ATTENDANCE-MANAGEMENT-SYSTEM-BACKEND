@@ -76,6 +76,7 @@ router.get('/programs', validate(listProgramsQuerySchema), hodController.listPro
 router.post('/programs', validate(createProgramSchema), hodController.createProgram);
 router.get('/programs/:id', validate(programIdParamSchema), hodController.getProgramById);
 router.patch('/programs/:id', validate(updateProgramSchema), hodController.updateProgram);
+router.delete('/programs/:id', validate(programIdParamSchema), hodController.deleteProgram);
 
 // ============================================================
 // 3. ACADEMIC YEAR MANAGEMENT
@@ -89,6 +90,7 @@ router.get(
 router.post('/academic-years', validate(createAcademicYearSchema), hodController.createAcademicYear);
 router.get('/academic-years/:id', validate(academicYearIdParamSchema), hodController.getAcademicYearById);
 router.patch('/academic-years/:id', validate(updateAcademicYearSchema), hodController.updateAcademicYear);
+router.delete('/academic-years/:id', validate(academicYearIdParamSchema), hodController.deleteAcademicYear);
 
 // ============================================================
 // 4. SECTION MANAGEMENT
@@ -111,6 +113,7 @@ router.get('/subjects', validate(listSubjectsQuerySchema), hodController.listSub
 router.post('/subjects', validate(createSubjectSchema), hodController.createSubject);
 router.get('/subjects/:id', validate(subjectIdParamSchema), hodController.getSubjectById);
 router.patch('/subjects/:id', validate(updateSubjectSchema), hodController.updateSubject);
+router.delete('/subjects/:id', validate(subjectIdParamSchema), hodController.deleteSubject);
 
 // ============================================================
 // 6. TEACHER MANAGEMENT
@@ -165,5 +168,9 @@ router.get(
 );
 router.get('/attendance/low-attendance', validate(hodAttendanceQuerySchema), hodController.getLowAttendance);
 router.get('/reports', validate(hodAttendanceQuerySchema), hodController.getReportsSummary);
+router.get(
+  '/sections/:sectionId/students/attendance/:subjectId',
+  hodController.getSectionStudentsSubjectAttendance
+);
 
 export default router;

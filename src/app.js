@@ -4,6 +4,11 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import crypto from 'crypto';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 
 import { apiLimiter } from './middleware/rateLimiter.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -68,11 +73,11 @@ app.use(
 
 // ─────────────────────────────────────────────────────────
 // Request Parsing
-// Keep body limit small — this is a REST API, not a file upload service.
-// Large payloads (e.g. face images) should go through a dedicated upload endpoint.
+// JSON limit raised to 2mb to accommodate face descriptors
+// and base64 thumbnails in multipart boundary data.
 // ─────────────────────────────────────────────────────────
-app.use(express.json({ limit: '512kb' }));
-app.use(express.urlencoded({ extended: true, limit: '512kb' }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // ─────────────────────────────────────────────────────────
 // HTTP Logging (skip in test; use structured format in production)
@@ -85,6 +90,13 @@ if (process.env.NODE_ENV !== 'test') {
 // Global Rate Limiter (applies to all routes below)
 // ─────────────────────────────────────────────────────────
 app.use(apiLimiter);
+
+// ─────────────────────────────────────────────────────────
+// Static File Serving — Face Photos
+// Uploaded face photos are served from /uploads/faces/
+// ─────────────────────────────────────────────────────────
+const UPLOAD_DIR = process.env.FACE_PHOTO_DIR || path.join(process.cwd(), 'uploads', 'faces');
+app.use('/uploads/faces', express.static(UPLOAD_DIR));
 
 // ─────────────────────────────────────────────────────────
 // Health check endpoint (Public — unauthenticated)

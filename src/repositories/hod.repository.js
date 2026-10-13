@@ -34,7 +34,12 @@ class HodRepository {
           include: { sections: true },
           orderBy: { yearNumber: 'asc' },
         },
-        _count: { select: { students: true, subjects: true } },
+        _count: {
+          select: {
+            students: true,
+            subjects: { where: { isActive: true } },
+          },
+        },
       },
       orderBy: { name: 'asc' },
     });
@@ -49,7 +54,12 @@ class HodRepository {
           include: { sections: true },
           orderBy: { yearNumber: 'asc' },
         },
-        _count: { select: { students: true, subjects: true } },
+        _count: {
+          select: {
+            students: true,
+            subjects: { where: { isActive: true } },
+          },
+        },
       },
     });
   }
@@ -130,6 +140,12 @@ class HodRepository {
     });
   }
 
+  async deleteAcademicYear(academicYearId) {
+    return prisma.academicYear.delete({
+      where: { id: academicYearId },
+    });
+  }
+
   // ============================================================
   // SECTIONS
   // ============================================================
@@ -203,16 +219,26 @@ class HodRepository {
   // SUBJECTS
   // ============================================================
 
-  async findSubjectsByDepartment(departmentId, { programId, isActive } = {}) {
+  async findSubjectsByDepartment(departmentId, { programId, academicYearId, isActive } = {}) {
     return prisma.subject.findMany({
       where: {
         departmentId,
         ...(programId && { programId }),
+        // When an academic year is selected, return subjects assigned to that
+        // year AND subjects that haven't been assigned to any year yet (null).
+        // This keeps legacy subjects visible so the HOD can assign them.
+        ...(academicYearId && {
+          OR: [
+            { academicYearId },
+            { academicYearId: null },
+          ],
+        }),
         ...(isActive !== undefined && { isActive }),
       },
       include: {
         department: { select: { id: true, name: true, code: true } },
         program: { select: { id: true, name: true, code: true } },
+        academicYear: { select: { id: true, yearNumber: true, label: true, programId: true } },
       },
       orderBy: { name: 'asc' },
     });
@@ -224,13 +250,14 @@ class HodRepository {
       include: {
         department: true,
         program: true,
+        academicYear: true,
       },
     });
   }
 
   async findSubjectByCode(code) {
-    return prisma.subject.findUnique({
-      where: { code: code.toUpperCase() },
+    return prisma.subject.findFirst({
+      where: { code: code.toUpperCase(), isActive: true },
     });
   }
 
@@ -240,6 +267,7 @@ class HodRepository {
       include: {
         department: { select: { id: true, name: true, code: true } },
         program: { select: { id: true, name: true, code: true } },
+        academicYear: { select: { id: true, yearNumber: true, label: true, programId: true } },
       },
     });
   }
@@ -254,7 +282,14 @@ class HodRepository {
       include: {
         department: { select: { id: true, name: true, code: true } },
         program: { select: { id: true, name: true, code: true } },
+        academicYear: { select: { id: true, yearNumber: true, label: true, programId: true } },
       },
+    });
+  }
+
+  async deleteSubject(subjectId) {
+    return prisma.subject.delete({
+      where: { id: subjectId },
     });
   }
 

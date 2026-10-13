@@ -26,8 +26,8 @@ class SubjectRepository {
   }
 
   async findByCode(code) {
-    return prisma.subject.findUnique({
-      where: { code: code.toUpperCase() },
+    return prisma.subject.findFirst({
+      where: { code: code.toUpperCase(), isActive: true },
     });
   }
 

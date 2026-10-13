@@ -68,9 +68,9 @@ class RegistrationService {
 
   /**
    * Subjects for a given section.
-   * Since the schema has no isCompulsory flag on Subject, we return all active
-   * subjects for the program of that section so the student can select them.
-   * The frontend will treat all subjects as selectable (no auto-lock).
+   * Returns all active subjects for the section's program AND academic year.
+   * Includes the subjectType field so the frontend can separate Common (compulsory)
+   * from Elective (student choice) subjects.
    */
   async getSubjectsBySection(sectionId) {
     const section = await prisma.section.findUnique({
@@ -84,9 +84,19 @@ class RegistrationService {
     if (!section) throw new NotFoundError('Section not found');
 
     const programId = section.academicYear.programId;
+    const academicYearId = section.academicYearId;
 
     return prisma.subject.findMany({
-      where: { programId, isActive: true },
+      where: {
+        programId,
+        isActive: true,
+        // Show subjects assigned to this academic year, plus unassigned (null)
+        // legacy subjects so they remain visible until assigned.
+        OR: [
+          { academicYearId },
+          { academicYearId: null },
+        ],
+      },
       select: {
         id: true,
         name: true,
@@ -94,6 +104,8 @@ class RegistrationService {
         credits: true,
         programId: true,
         departmentId: true,
+        academicYearId: true,
+        subjectType: true,
       },
       orderBy: { name: 'asc' },
     });
@@ -177,19 +189,23 @@ class RegistrationService {
       );
     }
 
-    // ── 4. Validate subjects (must belong to the program) ────────────────
+    // ── 4. Validate subjects (must belong to the program and academic year) ─
     if (subjectIds && subjectIds.length > 0) {
       const foundSubjects = await prisma.subject.findMany({
         where: {
           id: { in: subjectIds },
           programId,
           isActive: true,
+          OR: [
+            { academicYearId },
+            { academicYearId: null },
+          ],
         },
         select: { id: true },
       });
       if (foundSubjects.length !== subjectIds.length) {
         throw new BadRequestError(
-          'One or more selected subjects are invalid or do not belong to the chosen program.'
+          'One or more selected subjects are invalid or do not belong to the chosen program/year.'
         );
       }
     }

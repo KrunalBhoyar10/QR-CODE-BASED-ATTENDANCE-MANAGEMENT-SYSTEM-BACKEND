@@ -177,3 +177,29 @@ export const deleteStudent = async (req, res, next) => {
 };
 
 
+
+export const getSectionStudentsAttendance = async (req, res, next) => {
+  try {
+    const result = await teacherService.getSectionStudentsAttendance(
+      req.user.id,
+      req.params.sectionId
+    );
+    return successResponse(res, 200, 'Section attendance summary retrieved', result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getSectionStudentsSubjectAttendance = async (req, res, next) => {
+  try {
+    const result = await teacherService.getSectionStudentsSubjectAttendance(
+      req.user.id,
+      req.params.sectionId,
+      req.params.subjectId,
+      req.query
+    );
+    return successResponse(res, 200, 'Subject attendance summary retrieved', result);
+  } catch (error) {
+    next(error);
+  }
+};

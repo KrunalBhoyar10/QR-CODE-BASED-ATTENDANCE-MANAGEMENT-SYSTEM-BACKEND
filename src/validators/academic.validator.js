@@ -78,6 +78,7 @@ export const createSubjectSchema = z.object({
     name: z.string().trim().min(2, 'Subject name is required'),
     code: z.string().trim().min(2, 'Subject code is required').max(20),
     credits: z.number().int().positive().optional().nullable(),
+    subjectType: z.enum(['COMMON', 'ELECTIVE']).optional().default('COMMON'),
     departmentId: z.string().uuid('Invalid department ID'),
     programId: z.string().uuid('Invalid program ID'),
   }),
@@ -91,5 +92,6 @@ export const updateSubjectSchema = z.object({
     name: z.string().trim().min(2).optional(),
     code: z.string().trim().min(2).max(20).optional(),
     credits: z.number().int().positive().optional().nullable(),
+    subjectType: z.enum(['COMMON', 'ELECTIVE']).optional(),
   }),
 });

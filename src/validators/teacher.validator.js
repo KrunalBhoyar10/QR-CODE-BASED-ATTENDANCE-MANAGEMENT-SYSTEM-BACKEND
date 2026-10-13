@@ -109,7 +109,7 @@ export const listSessionsQuerySchema = z.object({
   query: z.object({
     page: z.coerce.number().int().min(1).optional().default(1),
     limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-    status: z.enum(['SCHEDULED', 'ACTIVE', 'COMPLETED', 'CANCELLED']).optional(),
+    status: z.enum(['SCHEDULED', 'ACTIVE', 'ENDED', 'COMPLETED', 'CANCELLED']).optional(),
     assignmentId: z.string().uuid('Invalid assignment ID format').optional(),
     subjectId: z.string().uuid('Invalid subject ID format').optional(),
     sectionId: z.string().uuid('Invalid section ID format').optional(),

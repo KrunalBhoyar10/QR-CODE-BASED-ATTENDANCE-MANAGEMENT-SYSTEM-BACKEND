@@ -1,4 +1,28 @@
-﻿import teacherRepository from '../repositories/teacher.repository.js';
+
+const parseDateRange = (startDate, endDate) => {
+  if (!startDate && !endDate) return null;
+  let start = null;
+  let end = null;
+  if (startDate) {
+    const sStr = String(startDate).split('T')[0];
+    start = new Date(`${sStr}T00:00:00.000Z`);
+  }
+  if (endDate) {
+    const eStr = String(endDate).split('T')[0];
+    end = new Date(`${eStr}T23:59:59.999Z`);
+  } else if (startDate) {
+    const sStr = String(startDate).split('T')[0];
+    end = new Date(`${sStr}T23:59:59.999Z`);
+  }
+  const cond = {};
+  if (start && !isNaN(start.getTime())) cond.gte = start;
+  if (end && !isNaN(end.getTime())) cond.lte = end;
+  return Object.keys(cond).length > 0 ? cond : null;
+};
+
+import { prisma } from '../lib/prisma.js';
+import teacherRepository from '../repositories/teacher.repository.js';
+import studentRepository from '../repositories/student.repository.js';
 import userRepository from '../repositories/user.repository.js';
 import refreshTokenRepository from '../repositories/refreshToken.repository.js';
 import auditService from './audit.service.js';
@@ -701,14 +725,15 @@ class TeacherService {
       throw new ForbiddenError('Access denied: You do not have permission to close this session');
     }
 
-    if (session.status === 'COMPLETED' || session.status === 'CANCELLED') {
+    if (['ENDED', 'COMPLETED', 'CANCELLED'].includes(session.status)) {
+      await deleteCache(`attendance:session:${sessionId}`);
       return {
         message: `Session is already ${session.status.toLowerCase()}`,
         session,
       };
     }
 
-    const updated = await teacherRepository.updateSessionStatus(sessionId, 'COMPLETED', {
+    const updated = await teacherRepository.updateSessionStatus(sessionId, 'ENDED', {
       endTime: new Date(),
     });
 
@@ -795,6 +820,127 @@ class TeacherService {
         totalPages: Math.ceil(recordsResult.totalCount / limit) || 1,
       },
     };
+  }
+  async getSectionStudentsAttendance(userId, sectionId) {
+    await resolveTeacher(userId);
+    if (!sectionId) throw new BadRequestError('Section ID is required');
+
+    const students = await teacherRepository.findStudentsBySection(sectionId);
+
+    // Fetch attendance summary for each student in parallel
+    const results = await Promise.all(
+      students.map(async (s) => {
+        try {
+          const summary = await studentRepository.getStudentAttendanceSummary(s.id, sectionId);
+          return {
+            studentId: s.id,
+            attendancePercentage: summary.attendancePercentage ?? 0,
+            presentCount: summary.presentCount ?? 0,
+            totalSessions: summary.totalSessions ?? 0,
+          };
+        } catch {
+          return { studentId: s.id, attendancePercentage: 0, presentCount: 0, totalSessions: 0 };
+        }
+      })
+    );
+
+    // Return as map: { [studentId]: { attendancePercentage, presentCount, totalSessions } }
+    const map = {};
+    results.forEach((r) => { map[r.studentId] = r; });
+    return map;
+  }
+
+  async getSectionStudentsSubjectAttendance(userId, sectionId, subjectId, filters = {}) {
+    await resolveTeacher(userId);
+    if (!sectionId)  throw new BadRequestError('Section ID is required');
+    if (!subjectId)  throw new BadRequestError('Subject ID is required');
+
+    const students = await teacherRepository.findStudentsBySection(sectionId);
+    if (!students.length) return [];
+
+    let dateFilter = null;
+    const targetDate = filters.date || (filters.startDate && filters.startDate === filters.endDate ? filters.startDate : null);
+
+    if (targetDate) {
+      const d = targetDate.includes('T') ? targetDate.split('T')[0] : targetDate;
+      dateFilter = {
+        gte: new Date(d + 'T00:00:00.000Z'),
+        lte: new Date(d + 'T23:59:59.999Z'),
+      };
+    } else if (filters.startDate || filters.endDate) {
+      const range = {};
+      if (filters.startDate) {
+        const s = filters.startDate.includes('T') ? filters.startDate.split('T')[0] : filters.startDate;
+        range.gte = new Date(s + 'T00:00:00.000Z');
+      }
+      if (filters.endDate) {
+        const e = filters.endDate.includes('T') ? filters.endDate.split('T')[0] : filters.endDate;
+        range.lte = new Date(e + 'T23:59:59.999Z');
+      }
+      dateFilter = range;
+    }
+
+    const sessionWhere = {
+      sectionId,
+      subjectId,
+      status: { in: ['ACTIVE', 'ENDED', 'COMPLETED'] },
+      ...(dateFilter ? { sessionDate: dateFilter } : {}),
+    };
+
+    const sessions = await prisma.attendanceSession.findMany({
+      where: sessionWhere,
+      select: { id: true, sessionDate: true, startTime: true, endTime: true },
+      orderBy: { sessionDate: 'asc' },
+    });
+
+    const totalSessions = sessions.length;
+    const sessionIds = sessions.map(s => s.id);
+
+    let records = [];
+    if (sessionIds.length > 0) {
+      records = await prisma.attendanceRecord.findMany({
+        where: {
+          sessionId: { in: sessionIds },
+          studentId: { in: students.map(s => s.id) },
+        },
+        select: {
+          studentId: true,
+          sessionId: true,
+          status: true,
+        },
+      });
+    }
+
+    const studentList = students.map(s => {
+      const studentRecords = records.filter(r => r.studentId === s.id);
+      const presentCount = studentRecords.filter(r => r.status === 'PRESENT' || r.status === 'LATE').length;
+      const absentCount = totalSessions >= presentCount ? totalSessions - presentCount : 0;
+      const pct = totalSessions > 0 ? Number(((presentCount / totalSessions) * 100).toFixed(1)) : 0;
+
+      return {
+        id: s.id,
+        studentId: s.id,
+        studentName: `${s.user?.firstName || ''} ${s.user?.lastName || ''}`.trim() || 'Student',
+        email: s.user?.email || '',
+        rollNumber: s.rollNumber || '',
+        enrollmentNumber: s.enrollmentNumber || '',
+        totalClasses: totalSessions,
+        totalSessions,
+        presentCount,
+        totalPresent: presentCount,
+        absentCount,
+        totalAbsent: absentCount,
+        attendancePercentage: pct,
+        percentage: pct,
+        dailyStatus: totalSessions > 0 ? (presentCount > 0 ? 'PRESENT' : 'ABSENT') : 'NO_CLASS',
+      };
+    });
+
+    studentList.forEach(item => {
+      studentList[item.studentId] = item;
+    });
+
+    return studentList;
   }
 }
 

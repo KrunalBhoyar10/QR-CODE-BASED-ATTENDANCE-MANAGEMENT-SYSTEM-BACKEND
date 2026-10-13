@@ -94,6 +94,8 @@ export const updateAcademicYearSchema = z.object({
     id: z.string().uuid('Invalid academic year ID format'),
   }),
   body: z.object({
+    yearNumber: z.number().int().min(1, 'Year number must be at least 1').max(10).optional(),
+    semesterCount: z.number().int().min(1).max(8).optional(),
     label: z.string().trim().min(1).max(50).optional(),
   }),
 });
@@ -148,6 +150,7 @@ export const createSubjectSchema = z.object({
     code: z.string().trim().min(1, 'Subject code is required').max(20),
     credits: z.number().int().min(1).max(10).optional().nullable(),
     isActive: z.boolean().optional().default(true),
+    subjectType: z.enum(['COMMON', 'ELECTIVE']).optional().default('COMMON'),
     programId: z.string().uuid('Invalid program ID format'),
     academicYearId: z.string().uuid('Invalid academic year ID format').optional().nullable(),
   }),
@@ -162,6 +165,8 @@ export const updateSubjectSchema = z.object({
     code: z.string().trim().min(1).max(20).optional(),
     credits: z.number().int().min(1).max(10).optional().nullable(),
     isActive: z.boolean().optional(),
+    subjectType: z.enum(['COMMON', 'ELECTIVE']).optional(),
+    academicYearId: z.string().uuid('Invalid academic year ID format').optional().nullable(),
   }),
 });
 
@@ -170,6 +175,7 @@ export const subjectIdParamSchema = uuidParam('subject');
 export const listSubjectsQuerySchema = z.object({
   query: z.object({
     programId: z.string().uuid('Invalid program ID format').optional(),
+    academicYearId: z.string().uuid('Invalid academic year ID format').optional(),
     isActive: boolQuery,
   }),
 });

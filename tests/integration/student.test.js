@@ -4,12 +4,15 @@ import { Prisma } from '@prisma/client';
 // ─────────────────────────────────────────────────────────
 // Mock Prisma & Redis BEFORE dynamic imports
 // ─────────────────────────────────────────────────────────
+const mockSessionLock = jest.fn().mockResolvedValue([{ status: 'ACTIVE' }]);
+
 jest.unstable_mockModule('../../src/lib/prisma.js', () => ({
   prisma: {
     $queryRaw: jest.fn().mockResolvedValue([{ 1: 1 }]),
     $disconnect: jest.fn().mockResolvedValue(true),
     $transaction: jest.fn(async (cb) =>
       cb({
+        $queryRaw: mockSessionLock,
         attendanceRecord: {
           findUnique: jest.fn().mockResolvedValue(null),
           create: jest.fn(),
@@ -137,6 +140,7 @@ describe('Student Backend Module & Attendance Marking Flow Integration Tests', (
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSessionLock.mockResolvedValue([{ status: 'ACTIVE' }]);
 
     studentAccessToken = generateAccessToken({
       id: STUDENT_USER_ID,
@@ -361,6 +365,7 @@ describe('Student Backend Module & Attendance Marking Flow Integration Tests', (
     beforeEach(() => {
       prisma.$transaction.mockImplementation(async (cb) =>
         cb({
+          $queryRaw: mockSessionLock,
           attendanceRecord: {
             findUnique: jest.fn().mockResolvedValue(null),
             create: jest.fn().mockResolvedValue({
@@ -507,6 +512,37 @@ describe('Student Backend Module & Attendance Marking Flow Integration Tests', (
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(res.body.message).toContain('expired');
+    });
+
+    it('rejects a stale QR when PostgreSQL says the session ended, even if Redis still has it', async () => {
+      studentRepository.findSessionById.mockResolvedValue({ ...mockSession, status: 'ENDED' });
+
+      const res = await request(app)
+        .post('/api/v1/student/attendance/mark')
+        .set('Authorization', `Bearer ${studentAccessToken}`)
+        .send({ sessionId: SESSION_ID, sessionToken: MOCK_SESSION_TOKEN });
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain('Session is ended');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rechecks the session under a row lock before saving attendance', async () => {
+      mockSessionLock.mockResolvedValue([{ status: 'ENDED' }]);
+
+      const res = await request(app)
+        .post('/api/v1/student/attendance/mark')
+        .set('Authorization', `Bearer ${studentAccessToken}`)
+        .send({
+          sessionId: SESSION_ID,
+          sessionToken: MOCK_SESSION_TOKEN,
+          latitude: 19.0760,
+          longitude: 72.8777,
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain('Session is ended');
+      expect(mockSessionLock).toHaveBeenCalled();
     });
 
     // Test 7: Invalid QR rejected

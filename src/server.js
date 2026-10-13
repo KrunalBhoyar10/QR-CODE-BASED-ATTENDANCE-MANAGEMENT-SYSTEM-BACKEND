@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import app from './app.js';
 import logger from './lib/logger.js';
-import { checkDatabaseConnection, prisma } from './lib/prisma.js';
+import { checkDatabaseConnection, startKeepAlive, prisma } from './lib/prisma.js';
 import { checkRedisConnection, redis } from './lib/redis.js';
 import { validateEnv } from './utils/validateEnv.js';
 
@@ -34,6 +34,10 @@ const startServer = async () => {
     logger.info(`Health check available at: http://localhost:${PORT}/health`);
     logger.info(`API endpoints available at: http://localhost:${PORT}/api/v1`);
   });
+
+  // Start keep-alive ping to prevent Neon serverless from dropping idle connections
+  startKeepAlive();
+  logger.info('Database keep-alive ping started (every 4 minutes).');
 
   // Graceful shutdown handling
   const shutdown = async (signal) => {
