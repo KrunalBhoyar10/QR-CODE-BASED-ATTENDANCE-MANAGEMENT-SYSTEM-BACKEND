@@ -921,6 +921,29 @@ class HodService {
     };
   }
 
+  async deleteTeacher(hodUserId, teacherId, req) {
+    const departmentId = await resolveHodDepartment(hodUserId);
+    const teacher = await hodRepository.findTeacherById(teacherId);
+    if (!teacher) throw new NotFoundError(`Teacher '${teacherId}' not found`);
+    if (teacher.departmentId !== departmentId) {
+      throw new ForbiddenError('This teacher does not belong to your department');
+    }
+
+    const teacherName = `${teacher.user.firstName} ${teacher.user.lastName}`;
+    await hodRepository.deleteTeacher(teacherId);
+
+    await auditService.log({
+      userId: hodUserId,
+      action: 'HOD_TEACHER_DELETED',
+      entity: 'Teacher',
+      entityId: teacherId,
+      details: { teacherEmail: teacher.user.email, teacherName, employeeId: teacher.employeeId },
+      req,
+    });
+
+    return { message: `Teacher '${teacherName}' deleted successfully` };
+  }
+
   // ─────────────────────────────────────────────────────────
   // 7. Teaching Assignments
   // ─────────────────────────────────────────────────────────

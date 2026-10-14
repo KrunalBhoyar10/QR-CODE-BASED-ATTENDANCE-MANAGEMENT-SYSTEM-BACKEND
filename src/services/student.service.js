@@ -503,21 +503,10 @@ class StudentService {
             userAgent: req?.headers?.['user-agent'] || null,
             remarks: `Verified via QR Scan${session.faceVerificationRequired ? ' & Face Verification' : ''}${session.latitude !== null ? ' & Geofence' : ''}`,
           },
-          include: {
-            session: {
-              include: {
-                subject: { select: { id: true, name: true, code: true } },
-                section: { select: { id: true, name: true } },
-                teacher: {
-                  include: {
-                    user: { select: { id: true, firstName: true, lastName: true } },
-                  },
-                },
-              },
-            },
-          },
         });
-      });
+      },
+      { maxWait: 10000, timeout: 20000 }
+      );
     } catch (error) {
       // Catch PostgreSQL unique constraint violation (code P2002) for race condition safety
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -551,11 +540,13 @@ class StudentService {
       markedVia: record.markedVia,
       session: {
         id: session.id,
-        subject: record.session.subject,
-        section: record.session.section,
-        teacher: record.session.teacher?.user
-          ? `${record.session.teacher.user.firstName} ${record.session.teacher.user.lastName}`
-          : (typeof record.session.teacher === 'string' ? record.session.teacher : 'Teacher'),
+        subject: session.subject || session.teachingAssignment?.subject,
+        section: session.section || session.teachingAssignment?.section,
+        teacher: session.teacher?.user
+          ? `${session.teacher.user.firstName} ${session.teacher.user.lastName}`
+          : (session.teachingAssignment?.teacher?.user
+              ? `${session.teachingAssignment.teacher.user.firstName} ${session.teachingAssignment.teacher.user.lastName}`
+              : (typeof session.teacher === 'string' ? session.teacher : 'Teacher')),
         sessionDate: session.sessionDate,
         startTime: session.startTime,
         endTime: session.endTime,

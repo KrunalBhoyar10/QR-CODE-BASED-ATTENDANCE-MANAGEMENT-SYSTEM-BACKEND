@@ -1,3 +1,4 @@
+import registrationService from '../services/registration.service.js';
 import principalService from '../services/principal.service.js';
 import { successResponse } from '../utils/response.js';
 
@@ -173,6 +174,15 @@ export const createDepartment = async (req, res, next) => {
 /**
  * Controller: Get Departments
  */
+export const deleteDepartment = async (req, res, next) => {
+  try {
+    const result = await principalService.deleteDepartment(req.params.id);
+    return successResponse(res, 200, 'Department deleted successfully', result);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getDepartments = async (req, res, next) => {
   try {
     const departments = await principalService.getDepartments();
@@ -321,6 +331,48 @@ export const getReportsSummary = async (req, res, next) => {
   try {
     const report = await principalService.getReportsSummary(req.query);
     return successResponse(res, 200, 'Comprehensive attendance report generated successfully', report);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller: Get Section Students
+ */
+export const getSectionStudents = async (req, res, next) => {
+  try {
+    const students = await principalService.getSectionStudents(req.params.sectionId);
+    return successResponse(res, 200, 'Section students retrieved successfully', students);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller: Get Section Subjects
+ */
+export const getSectionSubjects = async (req, res, next) => {
+  try {
+    const subjects = await registrationService.getSubjectsBySection(req.params.sectionId);
+    return successResponse(res, 200, 'Section subjects retrieved successfully', subjects);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller: Get Section Students Attendance
+ */
+export const getSectionStudentsAttendance = async (req, res, next) => {
+  try {
+    const { sectionId, subjectId } = req.params;
+    const { date, startDate, endDate } = req.query;
+    const result = await principalService.getSectionStudentsSubjectAttendance(
+      sectionId,
+      subjectId || req.query.subjectId,
+      { date, startDate, endDate }
+    );
+    return successResponse(res, 200, 'Section students attendance retrieved successfully', result);
   } catch (error) {
     next(error);
   }

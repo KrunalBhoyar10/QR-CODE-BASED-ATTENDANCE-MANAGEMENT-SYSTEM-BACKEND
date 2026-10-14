@@ -301,6 +301,15 @@ export const createTeacher = async (req, res, next) => {
   }
 };
 
+export const deleteTeacher = async (req, res, next) => {
+  try {
+    const result = await hodService.deleteTeacher(req.user.id, req.params.id, req);
+    return successResponse(res, 200, result.message, null);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const updateTeacherStatus = async (req, res, next) => {
   try {
     const { isActive, reason } = req.body;

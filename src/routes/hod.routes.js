@@ -123,6 +123,7 @@ router.post('/teachers', validate(createTeacherSchema), hodController.createTeac
 router.get('/teachers/:id', validate(teacherIdParamSchema), hodController.getTeacherById);
 router.patch('/teachers/:id/status', validate(updateTeacherStatusSchema), hodController.updateTeacherStatus);
 router.post('/teachers/:id/reset-password', validate(resetTeacherPasswordSchema), hodController.resetTeacherPassword);
+router.delete('/teachers/:id', validate(teacherIdParamSchema), hodController.deleteTeacher);
 
 // ============================================================
 // 7. TEACHING ASSIGNMENTS

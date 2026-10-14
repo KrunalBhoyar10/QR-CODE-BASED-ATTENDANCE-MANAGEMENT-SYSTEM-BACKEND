@@ -727,7 +727,7 @@ describe('Teacher Backend Module Integration Tests', () => {
       });
       teacherRepository.updateSessionStatus.mockResolvedValue({
         id: SESSION_ID,
-        status: 'ENDED',
+        status: 'COMPLETED',
       });
 
       const res = await request(app)
@@ -736,10 +736,10 @@ describe('Teacher Backend Module Integration Tests', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.status).toBe('ENDED');
+      expect(res.body.data.status).toBe('COMPLETED');
       expect(teacherRepository.updateSessionStatus).toHaveBeenCalledWith(
         SESSION_ID,
-        'ENDED',
+        'COMPLETED',
         expect.any(Object)
       );
       expect(mockDeleteCache).toHaveBeenCalledWith(`attendance:session:${SESSION_ID}`);

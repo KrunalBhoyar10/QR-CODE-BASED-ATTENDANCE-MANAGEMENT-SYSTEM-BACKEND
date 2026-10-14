@@ -546,7 +546,17 @@ class TeacherRepository {
           include: {
             program: { select: { id: true, name: true, code: true } },
             academicYear: { select: { id: true, label: true, yearNumber: true } },
-            section: { select: { id: true, name: true } },
+            section: {
+            select: {
+              id: true,
+              name: true,
+              _count: {
+                select: {
+                  students: true,
+                },
+              },
+            },
+          },
             subject: { select: { id: true, name: true, code: true } },
           },
         },
@@ -570,7 +580,17 @@ class TeacherRepository {
           },
         },
         subject: { select: { id: true, name: true, code: true } },
-        section: { select: { id: true, name: true } },
+        section: {
+            select: {
+              id: true,
+              name: true,
+              _count: {
+                select: {
+                  students: true,
+                },
+              },
+            },
+          },
         program: { select: { id: true, name: true, code: true } },
         academicYear: { select: { id: true, label: true, yearNumber: true } },
         department: { select: { id: true, name: true, code: true } },
@@ -594,7 +614,17 @@ class TeacherRepository {
       },
       include: {
         subject: { select: { id: true, name: true, code: true } },
-        section: { select: { id: true, name: true } },
+        section: {
+            select: {
+              id: true,
+              name: true,
+              _count: {
+                select: {
+                  students: true,
+                },
+              },
+            },
+          },
         program: { select: { id: true, name: true, code: true } },
         academicYear: { select: { id: true, label: true, yearNumber: true } },
         _count: {
@@ -638,7 +668,17 @@ class TeacherRepository {
         take: limit,
         include: {
           subject: { select: { id: true, name: true, code: true } },
-          section: { select: { id: true, name: true } },
+          section: {
+            select: {
+              id: true,
+              name: true,
+              _count: {
+                select: {
+                  students: true,
+                },
+              },
+            },
+          },
           program: { select: { id: true, name: true, code: true } },
           academicYear: { select: { id: true, label: true, yearNumber: true } },
           _count: {
@@ -667,7 +707,17 @@ class TeacherRepository {
       },
       include: {
         subject: { select: { id: true, name: true, code: true } },
-        section: { select: { id: true, name: true } },
+        section: {
+            select: {
+              id: true,
+              name: true,
+              _count: {
+                select: {
+                  students: true,
+                },
+              },
+            },
+          },
         _count: {
           select: {
             attendanceRecords: true,
@@ -770,11 +820,12 @@ class TeacherRepository {
       ? Number(((presentCount / totalStudents) * 100).toFixed(2))
       : (totalMarked > 0 ? Number(((presentCount / totalMarked) * 100).toFixed(2)) : 0);
 
+    const derivedAbsent = Math.max(0, totalStudents - (presentCount + lateCount + excusedCount));
     return {
       totalStudents,
       totalMarked,
       presentCount,
-      absentCount,
+      absentCount: absentCount > 0 ? absentCount : derivedAbsent,
       lateCount,
       excusedCount,
       attendancePercentage,

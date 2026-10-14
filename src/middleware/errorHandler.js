@@ -35,6 +35,10 @@ export const errorHandler = (err, req, res, next) => {
   } else if (err.code === 'P2025') {
     statusCode = 404;
     message = 'Requested record not found';
+  } else if (err.code === 'P2028') {
+    statusCode = 504;
+    message = 'Database transaction timed out. Please try again.';
+    details = process.env.NODE_ENV === 'development' ? err.message : null;
   } else if (err.code?.startsWith('P')) {
     statusCode = 400;
     message = 'Database operation failed with invalid parameters';

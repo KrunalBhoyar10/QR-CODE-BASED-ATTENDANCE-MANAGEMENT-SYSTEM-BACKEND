@@ -438,6 +438,30 @@ class HodRepository {
     });
   }
 
+  /**
+   * Hard-delete a teacher and their associated user account.
+   */
+  async deleteTeacher(teacherId) {
+    const teacher = await prisma.teacher.findUnique({ where: { id: teacherId } });
+    if (!teacher) return null;
+
+    return prisma.$transaction(async (tx) => {
+      // Remove teaching assignments first (cascade should handle AttendanceSessions)
+      await tx.teachingAssignment.deleteMany({ where: { teacherId } });
+
+      // Delete the teacher record
+      const deleted = await tx.teacher.delete({ where: { id: teacherId } });
+
+      // Delete associated user record
+      if (teacher.userId) {
+        await tx.refreshToken.deleteMany({ where: { userId: teacher.userId } });
+        await tx.user.delete({ where: { id: teacher.userId } });
+      }
+
+      return deleted;
+    });
+  }
+
   // ============================================================
   // TEACHING ASSIGNMENTS
   // ============================================================

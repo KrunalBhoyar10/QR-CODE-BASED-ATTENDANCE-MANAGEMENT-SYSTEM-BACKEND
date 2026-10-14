@@ -652,6 +652,12 @@ class TeacherService {
         allowedRadius: s.allowedRadius,
         faceVerificationRequired: s.faceVerificationRequired,
         totalAttendanceMarked: s._count?.attendanceRecords || 0,
+        presentCount: s._count?.attendanceRecords || 0,
+        totalStudents: s.section?._count?.students || 0,
+        absentCount: Math.max(0, (s.section?._count?.students || 0) - (s._count?.attendanceRecords || 0)),
+        attendancePercentage: (s.section?._count?.students > 0)
+          ? Number((((s._count?.attendanceRecords || 0) / s.section._count.students) * 100).toFixed(1))
+          : 0,
         createdAt: s.createdAt,
       })),
       pagination: {
@@ -733,7 +739,7 @@ class TeacherService {
       };
     }
 
-    const updated = await teacherRepository.updateSessionStatus(sessionId, 'ENDED', {
+    const updated = await teacherRepository.updateSessionStatus(sessionId, 'COMPLETED', {
       endTime: new Date(),
     });
 

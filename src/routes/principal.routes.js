@@ -49,6 +49,7 @@ router.delete('/hods/:id', validate(hodIdParamSchema), principalController.delet
 router.post('/departments', validate(createDepartmentSchema), principalController.createDepartment);
 router.get('/departments', principalController.getDepartments);
 router.get('/departments/:id', validate(departmentIdParamSchema), principalController.getDepartmentById);
+router.delete('/departments/:id', validate(departmentIdParamSchema), principalController.deleteDepartment);
 router.get('/departments/:id/programs', validate(departmentIdParamSchema), principalController.getProgramsByDepartment);
 router.get('/programs/:id/academic-years', validate(programIdParamSchema), principalController.getAcademicYearsByProgram);
 router.get('/academic-years/:id/sections', validate(academicYearIdParamSchema), principalController.getSectionsByAcademicYear);
@@ -64,5 +65,12 @@ router.get('/attendance/sections', validate(attendanceQuerySchema), principalCon
 router.get('/attendance/subjects', validate(attendanceQuerySchema), principalController.getSubjectWiseAttendance);
 router.get('/attendance/low-attendance', validate(attendanceQuerySchema), principalController.getLowAttendance);
 router.get('/reports', validate(attendanceQuerySchema), principalController.getReportsSummary);
+
+
+// Section Students & Subject Attendance for Reports
+router.get('/sections/:sectionId/students', principalController.getSectionStudents);
+router.get('/sections/:sectionId/subjects', principalController.getSectionSubjects);
+router.get('/sections/:sectionId/students/attendance', principalController.getSectionStudentsAttendance);
+router.get('/sections/:sectionId/students/attendance/:subjectId', principalController.getSectionStudentsAttendance);
 
 export default router;

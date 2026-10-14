@@ -1,3 +1,4 @@
+import { prisma } from '../lib/prisma.js';
 import crypto from 'crypto';
 import userRepository from '../repositories/user.repository.js';
 import departmentRepository from '../repositories/department.repository.js';
@@ -412,7 +413,15 @@ class PrincipalService {
     // Revoke all sessions first
     await refreshTokenRepository.revokeAllUserTokens(hodId);
 
+    const deptId = existingHod.headedDepartment?.id;
     await userRepository.deleteHod(hodId);
+    if (deptId) {
+      try {
+        await this.deleteDepartment(deptId);
+      } catch (err) {
+        console.warn('Could not cascade delete department for HOD:', err.message);
+      }
+    }
 
     await auditService.log({
       userId: principalId,
@@ -429,6 +438,64 @@ class PrincipalService {
   /**
    * Academic Hierarchy: View Departments
    */
+  /**
+   * Delete Department permanently
+   */
+  async deleteDepartment(departmentId) {
+    const dept = await departmentRepository.findById(departmentId);
+    if (!dept) {
+      throw new NotFoundError(`Department with ID '${departmentId}' not found`);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete attendance sessions & records
+      await tx.attendanceRecord.deleteMany({
+        where: { session: { departmentId } },
+      });
+      await tx.attendanceSession.deleteMany({
+        where: { departmentId },
+      });
+
+      // 2. Delete teaching assignments
+      await tx.teachingAssignment.deleteMany({
+        where: { departmentId },
+      });
+
+      // 3. Delete students in this dept
+      const students = await tx.student.findMany({
+        where: { departmentId },
+        select: { userId: true },
+      });
+      const studentUserIds = students.map((s) => s.userId).filter(Boolean);
+      await tx.student.deleteMany({ where: { departmentId } });
+      if (studentUserIds.length > 0) {
+        await tx.user.deleteMany({ where: { id: { in: studentUserIds } } });
+      }
+
+      // 4. Delete teachers in this dept
+      const teachers = await tx.teacher.findMany({
+        where: { departmentId },
+        select: { userId: true },
+      });
+      const teacherUserIds = teachers.map((t) => t.userId).filter(Boolean);
+      await tx.teacher.deleteMany({ where: { departmentId } });
+      if (teacherUserIds.length > 0) {
+        await tx.user.deleteMany({ where: { id: { in: teacherUserIds } } });
+      }
+
+      // 5. Delete subjects
+      await tx.subject.deleteMany({ where: { departmentId } });
+
+      // 6. Delete programs (which cascades academic years & sections)
+      await tx.program.deleteMany({ where: { departmentId } });
+
+      // 7. Delete department
+      await tx.department.delete({ where: { id: departmentId } });
+    });
+
+    return { message: 'Department and associated records deleted permanently' };
+  }
+
   async getDepartments() {
     return departmentRepository.findAll();
   }
@@ -571,6 +638,127 @@ class PrincipalService {
       criticalLowAttendanceStudents: lowAttendance.students,
       generatedAt: new Date().toISOString(),
     };
+  }
+
+  async getSectionStudents(sectionId) {
+    if (!sectionId) throw new BadRequestError('Section ID is required');
+    return prisma.student.findMany({
+      where: { sectionId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true,
+            avatarUrl: true,
+          },
+        },
+      },
+      orderBy: { rollNumber: 'asc' },
+    });
+  }
+
+  async getSectionStudentsSubjectAttendance(sectionId, subjectId, filters = {}) {
+    if (!sectionId) throw new BadRequestError('Section ID is required');
+
+    const students = await prisma.student.findMany({
+      where: { sectionId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phoneNumber: true,
+            avatarUrl: true,
+          },
+        },
+      },
+      orderBy: { rollNumber: 'asc' },
+    });
+
+    if (!students.length) return [];
+
+    let dateFilter = null;
+    const targetDate = filters.date || (filters.startDate && filters.startDate === filters.endDate ? filters.startDate : null);
+
+    if (targetDate) {
+      const d = targetDate.includes('T') ? targetDate.split('T')[0] : targetDate;
+      dateFilter = {
+        gte: new Date(d + 'T00:00:00.000Z'),
+        lte: new Date(d + 'T23:59:59.999Z'),
+      };
+    } else if (filters.startDate || filters.endDate) {
+      const range = {};
+      if (filters.startDate) {
+        const s = filters.startDate.includes('T') ? filters.startDate.split('T')[0] : filters.startDate;
+        range.gte = new Date(s + 'T00:00:00.000Z');
+      }
+      if (filters.endDate) {
+        const e = filters.endDate.includes('T') ? filters.endDate.split('T')[0] : filters.endDate;
+        range.lte = new Date(e + 'T23:59:59.999Z');
+      }
+      dateFilter = range;
+    }
+
+    const sessionWhere = {
+      sectionId,
+      ...(subjectId && subjectId !== 'ALL' ? { subjectId } : {}),
+      status: { in: ['ACTIVE', 'ENDED', 'COMPLETED'] },
+      ...(dateFilter ? { sessionDate: dateFilter } : {}),
+    };
+
+    const sessions = await prisma.attendanceSession.findMany({
+      where: sessionWhere,
+      select: { id: true, sessionDate: true, startTime: true, endTime: true },
+      orderBy: { sessionDate: 'asc' },
+    });
+
+    const totalSessions = sessions.length;
+    const sessionIds = sessions.map(s => s.id);
+
+    let records = [];
+    if (sessionIds.length > 0) {
+      records = await prisma.attendanceRecord.findMany({
+        where: {
+          sessionId: { in: sessionIds },
+          studentId: { in: students.map(s => s.id) },
+        },
+        select: {
+          studentId: true,
+          sessionId: true,
+          status: true,
+        },
+      });
+    }
+
+    return students.map(s => {
+      const studentRecords = records.filter(r => r.studentId === s.id);
+      const presentCount = studentRecords.filter(r => r.status === 'PRESENT' || r.status === 'LATE').length;
+      const absentCount = totalSessions >= presentCount ? totalSessions - presentCount : 0;
+      const pct = totalSessions > 0 ? Number(((presentCount / totalSessions) * 100).toFixed(1)) : 0;
+
+      return {
+        id: s.id,
+        studentId: s.id,
+        studentName: `${s.user?.firstName || ''} ${s.user?.lastName || ''}`.trim() || 'Student',
+        email: s.user?.email || '',
+        rollNumber: s.rollNumber || '',
+        enrollmentNumber: s.enrollmentNumber || '',
+        totalClasses: totalSessions,
+        totalSessions,
+        presentCount,
+        totalPresent: presentCount,
+        absentCount,
+        totalAbsent: absentCount,
+        attendancePercentage: pct,
+        percentage: pct,
+        dailyStatus: targetDate ? (presentCount > 0 ? 'PRESENT' : totalSessions > 0 ? 'ABSENT' : 'NO_CLASS') : undefined,
+      };
+    });
   }
 }
 
